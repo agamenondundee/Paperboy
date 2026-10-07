@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Historic Houses</title>
+  <meta name="description" content="A guide to twelve historic houses, from Elizabethan prodigy houses to a modernist home over a waterfall.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <a class="brand" href="#top">Historic Houses</a>
+      <nav aria-label="Main">
+        <ul class="nav-links">
+          <li><a href="#houses">The houses</a></li>
+          <li><a href="#timeline">Timeline</a></li>
+          <li><a href="#styles">Styles</a></li>
+          <li><a href="#visiting">Visiting</a></li>
+        </ul>
+      </nav>
+      <button class="theme-toggle" type="button" aria-label="Switch colour theme">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero" id="top">
+      <div class="wrap hero-inner">
+        <p class="eyebrow">Four centuries of domestic architecture</p>
+        <h1>Houses that tell the story of their age</h1>
+        <p class="lede">From Bess of Hardwick’s glittering Elizabethan hall to a weekend retreat poised over a waterfall, these twelve houses show how people of wealth and ambition chose to live, entertain and be remembered.</p>
+        <a class="button" href="#houses">Explore the houses</a>
+      </div>
+      <div class="hero-art" aria-hidden="true"></div>
+    </section>
+
+    <section class="section" id="houses" aria-labelledby="houses-title">
+      <div class="wrap">
+        <div class="section-head">
+          <h2 id="houses-title">The houses</h2>
+          <p>Filter by region or century, or search by name, architect or county.</p>
+        </div>
+
+        <div class="controls">
+          <label class="search">
+            <span class="visually-hidden">Search houses</span>
+            <input type="search" id="search" placeholder="Search, e.g. Vanbrugh">
+          </label>
+          <div class="chips" role="group" aria-label="Filter by region" id="region-filter">
+            <button type="button" class="chip" data-region="all" aria-pressed="true">All</button>
+            <button type="button" class="chip" data-region="britain" aria-pressed="false">Britain</button>
+            <button type="button" class="chip" data-region="ireland" aria-pressed="false">Ireland</button>
+            <button type="button" class="chip" data-region="europe" aria-pressed="false">Europe</button>
+            <button type="button" class="chip" data-region="americas" aria-pressed="false">Americas</button>
+          </div>
+          <label class="select">
+            <span class="visually-hidden">Filter by century</span>
+            <select id="era-filter">
+              <option value="all">Any century</option>
+            </select>
+          </label>
+        </div>
+
+        <p class="result-count" id="result-count" aria-live="polite"></p>
+        <ul class="house-grid" id="house-grid"></ul>
+      </div>
+    </section>
+
+    <section class="section alt" id="timeline" aria-labelledby="timeline-title">
+      <div class="wrap">
+        <div class="section-head">
+          <h2 id="timeline-title">Timeline</h2>
+          <p>When building began on each house.</p>
+        </div>
+        <ol class="timeline" id="timeline-list"></ol>
+      </div>
+    </section>
+
+    <section class="section" id="styles" aria-labelledby="styles-title">
+      <div class="wrap">
+        <div class="section-head">
+          <h2 id="styles-title">Reading the styles</h2>
+          <p>A few clues for dating a house from the outside.</p>
+        </div>
+        <div class="style-grid">
+          <article class="style-card">
+            <h3>Elizabethan</h3>
+            <p class="style-dates">c.1558–1603</p>
+            <p>Tall, symmetrical fronts, towers, huge mullioned windows and a long gallery for exercise and display. Houses were often built in an E or H plan.</p>
+          </article>
+          <article class="style-card">
+            <h3>Baroque</h3>
+            <p class="style-dates">c.1690–1730</p>
+            <p>Movement and drama: massive columns, broken pediments, domes and skylines crowded with urns and statues. Interiors were painted floor to ceiling.</p>
+          </article>
+          <article class="style-card">
+            <h3>Palladian</h3>
+            <p class="style-dates">c.1715–1770</p>
+            <p>A reaction against Baroque excess. Calm proportions taken from Andrea Palladio, a temple portico at the centre and plain wings either side.</p>
+          </article>
+          <article class="style-card">
+            <h3>Gothic and Baronial revival</h3>
+            <p class="style-dates">c.1820–1900</p>
+            <p>The Victorians looked back to castles and abbeys: towers, turrets, battlements, pointed arches and an irregular, picturesque outline.</p>
+          </article>
+          <article class="style-card">
+            <h3>Modernist</h3>
+            <p class="style-dates">c.1920 onwards</p>
+            <p>Flat roofs, ribbon windows and reinforced concrete. Ornament gives way to the shape of the building itself and its setting.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section alt" id="visiting" aria-labelledby="visiting-title">
+      <div class="wrap visiting">
+        <div>
+          <h2 id="visiting-title">Planning a visit</h2>
+          <p>Most of these houses open seasonally, and many close their state rooms in winter. Always check the house’s own website for opening times and tickets before you travel.</p>
+          <ul class="tips">
+            <li><strong>Go early.</strong> The first hour after opening is usually the quietest.</li>
+            <li><strong>Join a membership.</strong> The National Trust, English Heritage, Historic Environment Scotland and Cadw offer free entry to the houses they care for.</li>
+            <li><strong>Leave time for the grounds.</strong> Parks and gardens were often as costly and as carefully planned as the house.</li>
+            <li><strong>Ask the room guides.</strong> Volunteers often know the stories that never made it into the guidebook.</li>
+          </ul>
+        </div>
+        <aside class="quote">
+          <blockquote>
+            <p>“Hardwick Hall, more glass than wall.”</p>
+          </blockquote>
+          <p class="quote-source">Traditional Derbyshire rhyme</p>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <p>Historic Houses. Façade drawings are simplified illustrations, not accurate elevations.</p>
+    </div>
+  </footer>
+
+  <dialog class="house-dialog" id="house-dialog" aria-labelledby="dialog-title">
+    <div class="dialog-inner">
+      <button type="button" class="dialog-close" aria-label="Close">×</button>
+      <div class="dialog-art" id="dialog-art" aria-hidden="true"></div>
+      <div class="dialog-body">
+        <p class="eyebrow" id="dialog-meta"></p>
+        <h2 id="dialog-title"></h2>
+        <dl class="facts" id="dialog-facts"></dl>
+        <div id="dialog-story"></div>
+        <h3>Do not miss</h3>
+        <ul class="highlights" id="dialog-highlights"></ul>
+      </div>
+    </div>
+  </dialog>
+
+  <script src="js/houses.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
