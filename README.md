@@ -38,6 +38,13 @@ automatically on slow devices. The hunter's cloak and scarf are simulated
 cloth. Blood sprays, pools and stays on the ground; heavy blows can behead
 ghouls.
 
+Five kinds of enemy, each with its own counter: ghouls swipe high (duck),
+Grave Hounds lunge low (jump or roll), Carrion Crows dive from above (strike
+or roll), Choir Witches throw high and low hexes from range (duck, jump, or
+cut them down) and the Butcher shrugs off light blows (roll from its chop,
+duck its sweep, stagger it with heavy attacks). The Hollow Bloom boss
+arrives every third wave.
+
 Three weapons: the Hunter's Axe (balanced), the Bone Scythe (long reach,
 its heavy attack spins and hits both sides) and the Blunderbuss (a spread
 shot, or a point-blank blast for its heavy, using ammo that refills over
