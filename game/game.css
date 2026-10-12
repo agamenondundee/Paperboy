@@ -1,0 +1,78 @@
+html, body {
+  margin: 0;
+  height: 100%;
+  background: #07050d;
+  overflow: hidden;
+}
+
+body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "Cormorant Garamond", Georgia, serif;
+  color: #d8d0e8;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#stage {
+  position: relative;
+  width: min(100vw, calc(100vh * 16 / 9));
+  width: min(100vw, calc(100dvh * 16 / 9));
+  aspect-ratio: 16 / 9;
+}
+
+canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+}
+
+#touch {
+  display: none;
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 10px 14px;
+  justify-content: space-between;
+  align-items: flex-end;
+  pointer-events: none;
+}
+
+#touch .pad {
+  display: flex;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+#touch .actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: 260px;
+}
+
+#touch button {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 1px solid rgba(190, 180, 230, 0.35);
+  background: rgba(20, 14, 34, 0.55);
+  color: #d8d0e8;
+  font: 600 15px "Cormorant Garamond", Georgia, serif;
+  touch-action: none;
+}
+
+#touch button.big {
+  width: 70px;
+  height: 70px;
+  font-size: 18px;
+}
+
+#touch button.held {
+  background: rgba(110, 130, 230, 0.45);
+}
+
+@media (hover: none) and (pointer: coarse) {
+  #touch { display: flex; }
+}

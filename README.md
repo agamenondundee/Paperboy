@@ -22,3 +22,14 @@ python3 -m http.server 8000
 
 Add an entry to `js/houses.js`. The `style` field picks the façade drawing:
 `elizabethan`, `baroque`, `palladian`, `gothic` or `modern`.
+
+## Hollow Lantern (game)
+
+`game/index.html` is a small gothic action game: a lantern-bearing hunter
+with a long axe fights through waves of ghouls in a fog-drowned graveyard,
+with a root-covered boss every third wave. Open it in a browser; it needs
+no build step.
+
+Controls: A/D move, W or Space jump, J or click to swing, K or right click
+for a heavy blow, Shift to roll, E to drink a vial, P to pause, M for sound.
+On phones and tablets on-screen buttons appear instead.
