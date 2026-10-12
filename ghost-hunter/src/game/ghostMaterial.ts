@@ -184,7 +184,7 @@ float gShim = 0.7 + 0.3 * sin(uTime * 1.9 + gRel.y * 8.0 + gN * 6.2831);
 float gBoost = 1.0 + uLit * 4.0 + uFlare * 3.0;
 totalEmissiveRadiance += uColor * (gRimK * uRim * gShim * gBoost + (uLit * 0.18 + uFlare * 0.12) * uRim + gEdge * 7.0);
 #ifdef GHOST_SMOKE
-  totalEmissiveRadiance += uColor * pow(gSm, 5.0) * 0.6;
+  totalEmissiveRadiance += uColor * pow(gSm, 5.0) * 0.35;
 #endif
 `;
 

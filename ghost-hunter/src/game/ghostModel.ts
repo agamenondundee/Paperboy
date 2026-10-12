@@ -40,7 +40,7 @@ export const LOOKS: Record<GhostKind, GhostLook> = {
   queen: { rim: 0xc9a2ff, body: 0xd8cfee, joints: 0xa395c2, opacity: 0.5, rimStrength: 1.8, scale: [1, 1, 1], hover: 0.15, smoke: false, pale: 0xe2dcec, pupil: 0xd9b8ff, pupilGlow: 9, pupilSize: 1, light: 1.6 },
   janitor: { rim: 0x8dff5a, body: 0xa9b89a, joints: 0x6a775e, opacity: 0.56, rimStrength: 1.6, scale: [1.12, 1.12, 1.12], hover: 0, smoke: false, pale: 0xd0d8c2, pupil: 0xb4ff70, pupilGlow: 8, pupilSize: 1, light: 1.4 },
   principal: { rim: 0xff3b2e, body: 0xb3abab, joints: 0x6d6262, opacity: 0.58, rimStrength: 1.7, scale: [1.05, 1.05, 1.05], hover: 0, smoke: false, pale: 0xded4ce, pupil: 0xff4a3a, pupilGlow: 9, pupilSize: 1, light: 1.4 },
-  hollow: { rim: 0xff1a0e, body: 0x040304, joints: 0x020202, opacity: 0.88, rimStrength: 0.8, scale: [1.12, 1.22, 1.12], hover: 0, smoke: true, pale: 0x0d0b0b, pupil: 0xff2010, pupilGlow: 16, pupilSize: 0.65, light: 1.8 },
+  hollow: { rim: 0xff1a0e, body: 0x040304, joints: 0x020202, opacity: 0.88, rimStrength: 0.55, scale: [1.12, 1.22, 1.12], hover: 0, smoke: true, pale: 0x0d0b0b, pupil: 0xff2010, pupilGlow: 16, pupilSize: 0.65, light: 1.8 },
 };
 
 // Bind-pose anchors (metres, model space).
@@ -855,7 +855,7 @@ export class GhostModel {
         walk: moving * (1 - runK) * calm,
         run: moving * runK * calm,
         sneak: (this.kind === "janitor" ? 0.35 + 0.65 * this.sneak : this.kind === "hollow" ? 0.45 : 0) * calm,
-        sad: (this.kind === "queen" ? 0.6 : 0) * calm,
+        sad: (this.kind === "queen" ? 0.42 : 0) * calm,
         agree: scare * 0.7,
         shake: Math.max(scare, this.writhe * 0.7),
       };
