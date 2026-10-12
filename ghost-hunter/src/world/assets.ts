@@ -202,6 +202,25 @@ export async function loadAssets(onProgress: (f: number) => void): Promise<Asset
     if (e.lengthComputable && e.total > 0) cb(e.loaded / e.total);
   };
 
+  // Models and the sky HDR ship as base64 text so they can be served by hosts
+  // that only allow common web file types. Decode to a blob URL for the loaders.
+  const fileLoader = new THREE.FileLoader();
+  const packedUrl = async (file: string, p: (f: number) => void) => {
+    const text = (await fileLoader.loadAsync(assetUrl(file + ".txt"), xhrProgress(p))) as string;
+    const bin = atob(text.trim());
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return URL.createObjectURL(new Blob([bytes]));
+  };
+  const loadPacked = async <T>(file: string, p: (f: number) => void, load: (url: string) => Promise<T>) => {
+    const url = await packedUrl(file, p);
+    try {
+      return await load(url);
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  };
+
   const texLoader = new THREE.TextureLoader();
   const gltfLoader = new GLTFLoader();
   const rgbeLoader = new RGBELoader().setDataType(THREE.HalfFloatType);
@@ -210,13 +229,13 @@ export async function loadAssets(onProgress: (f: number) => void): Promise<Asset
   add(
     "Xbot.glb",
     9,
-    (p) => gltfLoader.loadAsync(assetUrl("Xbot.glb"), xhrProgress(p)),
+    (p) => loadPacked("Xbot.glb", p, (u) => gltfLoader.loadAsync(u)),
     (g: GLTF) => (assets.xbot = g)
   );
   add(
     "narrow_moonlit_road_1k.hdr",
     5,
-    (p) => rgbeLoader.loadAsync(assetUrl("narrow_moonlit_road_1k.hdr"), xhrProgress(p)),
+    (p) => loadPacked("narrow_moonlit_road_1k.hdr", p, (u) => rgbeLoader.loadAsync(u)),
     (t: THREE.DataTexture) => {
       t.mapping = THREE.EquirectangularReflectionMapping;
       t.needsUpdate = true;
@@ -226,7 +245,7 @@ export async function loadAssets(onProgress: (f: number) => void): Promise<Asset
   add(
     "LeePerrySmith.glb",
     1.5,
-    (p) => gltfLoader.loadAsync(assetUrl("LeePerrySmith.glb"), xhrProgress(p)),
+    (p) => loadPacked("LeePerrySmith.glb", p, (u) => gltfLoader.loadAsync(u)),
     (g: GLTF) => (assets.lee = g)
   );
   for (const [key, file, srgb] of TEXTURES) {
