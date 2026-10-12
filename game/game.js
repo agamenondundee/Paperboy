@@ -49,11 +49,18 @@ function softened(src, factor) {
   return c;
 }
 
+// #game is the HUD layer on top (it also takes input); the scene renders offscreen
+// and reaches the screen through the WebGL post-processing pass on #view.
 const cv = document.getElementById('game');
 cv.width = W * R;
 cv.height = H * R;
-const ctx = cv.getContext('2d');
-ctx.setTransform(R, 0, 0, R, 0, 0);
+const hud = cv.getContext('2d');
+hud.setTransform(R, 0, 0, R, 0, 0);
+const [SCENE, ctx] = mk(W, H);
+const view = document.createElement('canvas');
+view.width = W * R;
+view.height = H * R;
+cv.parentNode.insertBefore(view, cv);
 
 // Glow buffer: everything that emits light is also drawn here, then blurred into bloom
 const [GLOW, gg] = mk(W, H, 0.5);
@@ -852,7 +859,8 @@ const KEYMAP = {
   KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right',
   KeyW: 'jump', ArrowUp: 'jump', Space: 'jump',
   KeyJ: 'attack', KeyK: 'heavy', ShiftLeft: 'dodge', ShiftRight: 'dodge', KeyL: 'dodge',
-  KeyE: 'heal', KeyR: 'heal', Enter: 'start', KeyP: 'pause', Escape: 'pause', KeyM: 'mute', KeyB: 'gore'
+  KeyE: 'heal', KeyR: 'heal', Enter: 'start', KeyP: 'pause', Escape: 'pause', KeyM: 'mute', KeyB: 'gore',
+  KeyS: 'down', ArrowDown: 'down', KeyQ: 'swap', Digit1: 'w1', Digit2: 'w2', Digit3: 'w3'
 };
 
 function press(k) {
@@ -1002,8 +1010,36 @@ const sfx = {
   pick: () => tone(660, 1320, 0.25, 0.12, 'triangle'),
   die: () => tone(180, 40, 0.6, 0.2, 'sawtooth', 600),
   death: () => { tone(110, 35, 2.2, 0.4, 'sawtooth', 500); tone(55, 30, 2.4, 0.4); },
-  boss: () => { tone(60, 40, 2.5, 0.5, 'sawtooth', 300); noise(2, 200, 60, 0.5, 0.4, 'lowpass'); }
+  boss: () => { tone(60, 40, 2.5, 0.5, 'sawtooth', 300); noise(2, 200, 60, 0.5, 0.4, 'lowpass'); },
+  shot: () => { noise(0.5, 3000, 120, 0.5, 0.9, 'lowpass'); tone(90, 30, 0.35, 0.6, 'triangle'); },
+  blast: () => { noise(0.8, 2400, 60, 0.4, 1, 'lowpass'); tone(70, 22, 0.6, 0.8, 'triangle'); },
+  click: () => noise(0.06, 3000, 2000, 6, 0.15),
+  swap: () => { noise(0.08, 4000, 2500, 8, 0.12); tone(900, 1200, 0.08, 0.05, 'triangle'); },
+  whiff: () => noise(0.18, 1400, 400, 1.5, 0.12),
+  reload: () => { noise(0.05, 2500, 1800, 5, 0.12); tone(600, 500, 0.05, 0.05, 'square'); }
 };
+
+/* ---------- Weapons ---------- */
+
+const WEAPONS = [
+  {
+    id: 'axe', name: "Hunter's Axe", note: 'Balanced cuts',
+    light: { dur: 0.42, from: 0.126, to: 0.231, range: 110, dmg: 22, kb: 170, st: 14 },
+    heavy: { dur: 0.82, from: 0.4, to: 0.56, range: 140, dmg: 62, kb: 330, st: 32, lunge: 280 }
+  },
+  {
+    id: 'scythe', name: 'Bone Scythe', note: 'Long reach, heavy spins both ways',
+    light: { dur: 0.5, from: 0.17, to: 0.3, range: 158, dmg: 19, kb: 150, st: 16 },
+    heavy: { dur: 0.95, from: 0.42, to: 0.68, range: 165, dmg: 46, kb: 260, st: 34, lunge: 120, both: true }
+  },
+  {
+    id: 'gun', name: 'Blunderbuss', note: 'Spread shot; heavy is a point-blank blast',
+    light: { dur: 0.38, fire: 0.07, range: 330, dmg: 17, kb: 120, st: 6, ammo: 1, spread: 3 },
+    heavy: { dur: 0.75, fire: 0.28, range: 150, dmg: 58, kb: 460, st: 20, ammo: 3, spread: 9 }
+  }
+];
+const AMMO_MAX = 8;
+const weapon = () => WEAPONS[P.weapon];
 
 /* ---------- Game state ---------- */
 
@@ -1013,6 +1049,7 @@ let banner = { text: '', sub: '', t: 99 }, swingCounter = 0, deadT = 0, playT = 
 let enemies = [], particles = [], spikes = [], shocks = [], pickups = [];
 let decals = [], fountains = [], screenSplats = [];
 let gore = true, best = 0, fxLow = false, slowT = 0;
+let zoom = 1.12, zoomKick = 0, bats = [], batT = 3;
 try {
   best = +localStorage.getItem('hollow-lantern-best') || 0;
   gore = localStorage.getItem('hollow-lantern-gore') !== 'off';
@@ -1023,7 +1060,8 @@ function newPlayer() {
     x: 700, y: GROUND, vx: 0, vy: 0, face: 1, hp: 100, maxHp: 100, hpLag: 100, st: 100, stDelay: 0,
     state: 'idle', t: 0, inv: 0, onGround: true, vials: 3, swing: 0, walk: 0, buf: null, bufT: 0,
     dodgeDir: 1, lunged: false, healed: false, trail: [], lx: 700, ly: GROUND - 40,
-    blood: 0, bladeX: 700, bladeY: GROUND - 40
+    blood: 0, bladeX: 700, bladeY: GROUND - 40, weapon: 0, ammo: AMMO_MAX, ammoT: 0, fired: false,
+    muzzleX: 700, muzzleY: GROUND - 60, flash: 0, swapT: 9, lowHit: false
   };
 }
 let P = newPlayer();
@@ -1039,6 +1077,7 @@ function titleGhouls() {
 
 function reset() {
   P = newPlayer();
+  cloth.ready = false;
   enemies = []; particles = []; spikes = []; shocks = []; pickups = [];
   decals = []; fountains = []; screenSplats = [];
   wave = 0; toSpawn = 0; score = 0; kills = 0; waveCleared = true; nextWaveT = 1.2;
@@ -1120,7 +1159,7 @@ const PCOL = {
   spark: ['#e8eeff', '#a9c1ff'],
   ember: ['#ff8a3a', '#ffb060', '#ff6a2a'],
   blood: ['#a50d1c', '#c8142a', '#860816', '#e0283a'],
-  mist: ['rgba(140,10,24,0.35)'],
+  mist: ['rgba(140,10,24,0.14)'],
   chunk: ['#5e0a14', '#7a1220', '#47060e'],
   heal: ['#ffcf7a', '#ff9a6a']
 };
@@ -1181,6 +1220,18 @@ function bleed(x, y, dir, amount, heavy) {
 }
 
 function ambient(dt) {
+  if (Math.random() < dt * 3) {
+    particles.push({
+      x: camX + rand(0, W), y: rand(GROUND - 150, GROUND - 8), vx: rand(-10, 10), vy: rand(-6, 6), life: 0, max: rand(4, 8),
+      size: rand(1.1, 2), col: pick(['#bfe0ff', '#d8f0ff', '#a8c8ff']), g: 0, add: true, drag: 0.985, type: 'firefly', seed: Math.random() * 10
+    });
+  }
+  if (mode !== 'title' && P.state !== 'dead' && Math.random() < dt * 14) {
+    particles.push({
+      x: P.lx + rand(-120, 120), y: P.ly + rand(-100, 60), vx: rand(-6, 6), vy: rand(-8, 4), life: 0, max: rand(2, 4),
+      size: rand(0.5, 1.1), col: '#e4ecff', g: 0, add: true, drag: 1, type: 'mote', seed: Math.random() * 10
+    });
+  }
   if (Math.random() < dt * 18) {
     particles.push({
       x: camX + rand(-40, W + 40), y: rand(GROUND - 30, H), vx: rand(-10, 25), vy: rand(-45, -15), life: 0, max: rand(3, 7),
@@ -1202,6 +1253,7 @@ function updateParticles(dt) {
   for (const p of particles) {
     p.life += dt;
     if (p.type === 'ember') p.vx += Math.sin(time * 2 + p.seed) * dt * 18;
+    if (p.type === 'firefly') { p.vx += Math.sin(time * 1.7 + p.seed * 3) * dt * 40; p.vy += Math.cos(time * 1.3 + p.seed * 5) * dt * 30; }
     p.px = p.x;
     p.py = p.y;
     p.vy += p.g * dt;
@@ -1252,6 +1304,159 @@ function updateParticles(dt) {
   screenSplats = screenSplats.filter(s => s.a > 0);
 }
 
+/* ---------- Cloth: the hunter's cloak and scarf are verlet chains ---------- */
+
+const CLOAK_ANCHORS = [[-10, -73], [-4, -75], [2, -75], [8, -73]];
+const cloth = { ready: false, strands: [], scarf: null };
+
+function makeChain(n, seg) {
+  const nodes = [];
+  for (let i = 0; i < n; i++) nodes.push({ x: 0, y: 0, px: 0, py: 0 });
+  return { nodes, seg };
+}
+
+function clothChains() {
+  const pose = playerPose(P);
+  const list = cloth.strands.map((c, i) => [c, CLOAK_ANCHORS[i][0], CLOAK_ANCHORS[i][1] + pose.bob, true]);
+  list.push([cloth.scarf, -3, -79 + pose.bob, false]);
+  return [list, pose];
+}
+
+function resetCloth() {
+  cloth.strands = CLOAK_ANCHORS.map((a, i) => makeChain(7, i === 0 || i === 3 ? 8.4 : 8.9));
+  cloth.scarf = makeChain(7, 5.4);
+  const [list, pose] = clothChains();
+  for (const [c, ax, ay] of list) {
+    const [x0, y0] = poseToWorld(P, pose, ax, ay);
+    c.nodes.forEach((q, i) => { q.x = q.px = x0 - P.face * i * 2; q.y = q.py = y0 + i * c.seg * 0.9; });
+  }
+  cloth.ready = true;
+}
+
+function updateCloth(dt) {
+  if (!cloth.ready) resetCloth();
+  const [list, pose] = clothChains();
+  const windA = Math.sin(time * 1.1) * 60 + Math.sin(time * 2.9) * 30 - 40;
+  const dt2 = dt * dt;
+  for (const [c, ax, ay, isCloak] of list) {
+    const n = c.nodes;
+    [n[0].x, n[0].y] = poseToWorld(P, pose, ax, ay);
+    n[0].px = n[0].x;
+    n[0].py = n[0].y;
+    for (let i = 1; i < n.length; i++) {
+      const q = n[i];
+      const vx = (q.x - q.px) * 0.965, vy = (q.y - q.py) * 0.965;
+      q.px = q.x;
+      q.py = q.y;
+      q.x += vx + windA * dt2 * (i / n.length);
+      q.y += vy + 1000 * dt2;
+    }
+    for (let it = 0; it < 4; it++) {
+      for (let i = 1; i < n.length; i++) {
+        const a = n[i - 1], b = n[i];
+        const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1;
+        const diff = (d - c.seg) / d;
+        if (i === 1) { b.x -= dx * diff; b.y -= dy * diff; }
+        else { a.x += dx * diff * 0.5; a.y += dy * diff * 0.5; b.x -= dx * diff * 0.5; b.y -= dy * diff * 0.5; }
+      }
+      for (let i = 1; i < n.length; i++) {
+        const q = n[i];
+        if (q.y > GROUND + 5) q.y = GROUND + 5;
+        if (isCloak) {
+          // keep the cloak hanging behind the hunter rather than through his legs
+          const lx = (q.x - P.x) * P.face;
+          if (lx > 9) q.x = P.x + 9 * P.face;
+        }
+      }
+    }
+  }
+}
+
+function drawCloth(g) {
+  if (!cloth.ready) return;
+  const fx = P.x, fy = P.y + 6;
+  const S = cloth.strands;
+  const cg = g.createLinearGradient(0, -80, 0, 0);
+  cg.addColorStop(0, '#2b2539');
+  cg.addColorStop(1, '#08060d');
+  g.fillStyle = cg;
+  g.beginPath();
+  const first = S[0].nodes, last = S[S.length - 1].nodes;
+  g.moveTo(first[0].x - fx, first[0].y - fy);
+  for (const q of first) g.lineTo(q.x - fx, q.y - fy);
+  // jagged hem: dip up between the strand tips
+  for (let k = 1; k < S.length; k++) {
+    const b = S[k].nodes[S[k].nodes.length - 1];
+    const ma = S[k - 1].nodes[S[k - 1].nodes.length - 2], mb = S[k].nodes[S[k].nodes.length - 2];
+    g.lineTo((ma.x + mb.x) / 2 - fx, (ma.y + mb.y) / 2 - fy + 2);
+    g.lineTo(b.x - fx, b.y - fy);
+  }
+  for (let i = last.length - 1; i >= 0; i--) g.lineTo(last[i].x - fx, last[i].y - fy);
+  g.closePath();
+  g.fill();
+  g.lineCap = 'round';
+  g.lineJoin = 'round';
+  g.strokeStyle = 'rgba(0,0,0,0.5)';
+  g.lineWidth = 1.4;
+  for (let k = 1; k < S.length - 1; k++) {
+    g.beginPath();
+    S[k].nodes.forEach((q, i) => (i ? g.lineTo(q.x - fx, q.y - fy) : g.moveTo(q.x - fx, q.y - fy)));
+    g.stroke();
+  }
+  g.strokeStyle = 'rgba(165,180,250,0.55)';
+  g.lineWidth = 1;
+  g.beginPath();
+  first.forEach((q, i) => (i ? g.lineTo(q.x - fx, q.y - fy) : g.moveTo(q.x - fx, q.y - fy)));
+  g.stroke();
+  // scarf ribbon
+  const sc = cloth.scarf.nodes;
+  g.strokeStyle = '#2c1d2c';
+  g.lineWidth = 5;
+  g.beginPath();
+  sc.forEach((q, i) => (i ? g.lineTo(q.x - fx, q.y - fy) : g.moveTo(q.x - fx, q.y - fy)));
+  g.stroke();
+  g.strokeStyle = 'rgba(200,150,190,0.25)';
+  g.lineWidth = 1.2;
+  g.stroke();
+}
+
+/* ---------- Sky life ---------- */
+
+function updateBats(dt) {
+  batT -= dt;
+  if (batT <= 0) {
+    batT = rand(7, 15);
+    const dir = Math.random() < 0.5 ? 1 : -1, y0 = rand(50, 200), n = 3 + Math.floor(Math.random() * 5);
+    for (let i = 0; i < n; i++) {
+      bats.push({ x: dir > 0 ? -30 - i * rand(14, 34) : W + 30 + i * rand(14, 34), y: y0 + rand(-30, 30), vx: dir * rand(110, 170), ph: rand(0, TAU), s: rand(0.6, 1.1) });
+    }
+  }
+  for (const b of bats) {
+    b.x += b.vx * dt;
+    b.ph += dt * rand(14, 20);
+    b.y += Math.sin(b.ph * 0.15) * 12 * dt;
+  }
+  bats = bats.filter(b => b.x > -400 && b.x < W + 400);
+}
+
+function drawBats() {
+  ctx.fillStyle = '#120c1c';
+  for (const b of bats) {
+    const f = Math.sin(b.ph) * 7 * b.s, s = b.s;
+    ctx.beginPath();
+    ctx.moveTo(b.x, b.y);
+    ctx.quadraticCurveTo(b.x - 6 * s, b.y - f - 3 * s, b.x - 13 * s, b.y - f * 1.3);
+    ctx.lineTo(b.x - 9 * s, b.y - f * 0.4 + 1);
+    ctx.lineTo(b.x - 5 * s, b.y + 1);
+    ctx.lineTo(b.x, b.y + 3 * s);
+    ctx.lineTo(b.x + 5 * s, b.y + 1);
+    ctx.lineTo(b.x + 9 * s, b.y - f * 0.4 + 1);
+    ctx.lineTo(b.x + 13 * s, b.y - f * 1.3);
+    ctx.quadraticCurveTo(b.x + 6 * s, b.y - f - 3 * s, b.x, b.y);
+    ctx.fill();
+  }
+}
+
 /* ---------- Combat ---------- */
 
 function damageEnemy(e, dmg, kb, heavy) {
@@ -1267,7 +1472,8 @@ function damageEnemy(e, dmg, kb, heavy) {
     e.wounds++;
   }
   burst(e.x, hy, 8, 'spark', dir);
-  P.blood = Math.min(1, P.blood + (heavy ? 0.45 : 0.22));
+  if (weapon().id !== 'gun') P.blood = Math.min(1, P.blood + (heavy ? 0.45 : 0.22));
+  if (heavy) zoomKick = Math.max(zoomKick, 0.025);
   sfx.hit();
   if (gore) sfx.splat();
   hitStop = heavy ? 0.09 : 0.05;
@@ -1323,12 +1529,17 @@ function killEnemy(e, heavy) {
   }
 }
 
-function playerHits(range, dmg, kb, heavy) {
+function hittable(e) {
+  if (e.dead || e.hitBy === P.swing || e.state === 'idle') return false;
+  return !((e.state === 'rise' && e.t < 0.6) || (e.state === 'emerge' && e.t < 1.6));
+}
+
+function playerHits(range, dmg, kb, heavy, both) {
   for (const e of enemies) {
-    if (e.dead || e.hitBy === P.swing || e.state === 'idle') continue;
-    if ((e.state === 'rise' && e.t < 0.6) || (e.state === 'emerge' && e.t < 1.6)) continue;
+    if (!hittable(e)) continue;
     const half = e.type === 'bloom' ? 70 : 16;
-    const dx = (e.x - P.x) * P.face;
+    let dx = (e.x - P.x) * P.face;
+    if (both) dx = Math.abs(dx);
     if (dx > -half - 12 && dx < range + half && P.y > GROUND - (e.type === 'bloom' ? 220 : 110)) {
       e.hitBy = P.swing;
       damageEnemy(e, dmg, kb, heavy);
@@ -1372,9 +1583,61 @@ function hurtPlayer(dmg, dir) {
 /* ---------- Updates ---------- */
 
 function startAttack(mv) {
-  P.state = 'attack'; P.t = 0; P.st -= 14; P.stDelay = 0.6; P.swing = ++swingCounter; P.buf = null;
+  const w = weapon();
+  if (w.id === 'gun' && P.ammo < w.light.ammo) { sfx.click(); P.buf = null; return; }
+  P.state = 'attack'; P.t = 0; P.st -= w.light.st; P.stDelay = 0.6; P.swing = ++swingCounter; P.buf = null; P.fired = false;
   if (mv) P.face = mv;
-  sfx.swing();
+  if (w.id !== 'gun') sfx.swing();
+}
+
+function startHeavy(mv) {
+  const w = weapon();
+  if (w.id === 'gun' && P.ammo < w.heavy.ammo) { sfx.click(); P.buf = null; return; }
+  P.state = 'heavy'; P.t = 0; P.st -= w.heavy.st; P.stDelay = 0.8; P.swing = ++swingCounter; P.buf = null; P.lunged = false; P.fired = false;
+  if (mv) P.face = mv;
+  if (w.id === 'gun') sfx.reload();
+}
+
+// The blunderbuss fires a spread of shot: it hits the nearest few enemies in front.
+function fireGun(spec, heavy) {
+  P.ammo -= spec.ammo;
+  P.fired = true;
+  P.flash = heavy ? 0.16 : 0.1;
+  const dir = P.face;
+  const mx = P.muzzleX, my = P.muzzleY;
+  (heavy ? sfx.blast : sfx.shot)();
+  shake = Math.max(shake, heavy ? 12 : 6);
+  zoomKick = Math.max(zoomKick, heavy ? 0.03 : 0.012);
+  for (let i = 0; i < (heavy ? 30 : 16); i++) {
+    particles.push({
+      x: mx, y: my, vx: dir * rand(300, 900), vy: rand(-140, 140), life: 0, max: rand(0.08, 0.2), size: rand(1, 2.2),
+      col: pick(['#fff1c4', '#ffc46a', '#ff8a3a']), g: 0, add: true, drag: 0.85, type: 'spark', seed: 0
+    });
+  }
+  for (let i = 0; i < (heavy ? 14 : 7); i++) {
+    particles.push({
+      x: mx + dir * rand(0, 30), y: my + rand(-6, 6), vx: dir * rand(20, 120), vy: rand(-40, -5), life: 0, max: rand(0.8, 1.6),
+      size: rand(5, 11), col: 'rgba(150,140,170,0.35)', g: -10, add: false, drag: 0.94, type: 'dust', seed: 0
+    });
+  }
+  const targets = enemies
+    .filter(e => hittable(e) && (e.x - P.x) * dir > -10 && Math.abs(e.x - P.x) < spec.range + (e.type === 'bloom' ? 60 : 0))
+    .sort((a, b) => Math.abs(a.x - P.x) - Math.abs(b.x - P.x))
+    .slice(0, spec.spread);
+  for (const e of targets) {
+    const d = Math.abs(e.x - P.x);
+    const fall = clamp(1.25 - d / spec.range, 0.45, 1.2);
+    e.hitBy = P.swing;
+    damageEnemy(e, Math.round(spec.dmg * fall), spec.kb * fall, heavy);
+  }
+  P.vx -= dir * (heavy ? 260 : 90);
+}
+
+function swapWeapon(i) {
+  if (i === P.weapon) return;
+  P.weapon = i;
+  P.swapT = 0;
+  sfx.swap();
 }
 
 function updatePlayer(dt) {
@@ -1385,7 +1648,7 @@ function updatePlayer(dt) {
   p.bufT -= dt;
   if (p.bufT <= 0) p.buf = null;
   p.blood = Math.max(0, p.blood - dt * 0.02);
-  if (gore && p.blood > 0.2 && Math.random() < dt * p.blood * 7) {
+  if (gore && p.blood > 0.2 && WEAPONS[p.weapon].id !== 'gun' && Math.random() < dt * p.blood * 7) {
     particles.push({
       x: p.bladeX, y: p.bladeY, vx: rand(-10, 10), vy: rand(0, 40), life: 0, max: 3, size: rand(1, 2), col: pick(PCOL.blood),
       g: 1100, add: false, drag: 0.99, type: 'blood', seed: 0, lane: rand(2, 10), rot: 0, spin: 0
@@ -1394,12 +1657,21 @@ function updatePlayer(dt) {
   const mv = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
   const busy = p.state === 'attack' || p.state === 'heavy' || p.state === 'dodge' || p.state === 'hurt' || p.state === 'heal' || p.state === 'dead';
 
+  p.flash = Math.max(0, p.flash - dt);
+  p.swapT += dt;
+  p.ammoT += dt;
+  if (p.ammo < AMMO_MAX && p.ammoT > 2.2) { p.ammo++; p.ammoT = 0; }
+  if (pressed.swap) p.nextWeapon = ((p.nextWeapon == null ? p.weapon : p.nextWeapon) + 1) % WEAPONS.length;
+  for (let i = 0; i < 3; i++) if (pressed['w' + (i + 1)]) p.nextWeapon = i;
+  if (p.nextWeapon != null && (p.state === 'idle' || p.state === 'run' || p.state === 'crouch')) {
+    swapWeapon(p.nextWeapon);
+    p.nextWeapon = null;
+  }
+  const w = WEAPONS[p.weapon];
   if (!busy) {
     if (p.buf === 'attack' && p.st > 0) startAttack(mv);
-    else if (p.buf === 'heavy' && p.st > 10 && p.onGround) {
-      p.state = 'heavy'; p.t = 0; p.st -= 32; p.stDelay = 0.8; p.swing = ++swingCounter; p.buf = null; p.lunged = false;
-      if (mv) p.face = mv;
-    } else if (p.buf === 'dodge' && p.st > 10 && p.onGround) {
+    else if (p.buf === 'heavy' && p.st > 10 && p.onGround) startHeavy(mv);
+    else if (p.buf === 'dodge' && p.st > 10 && p.onGround) {
       p.state = 'dodge'; p.t = 0; p.st -= 22; p.stDelay = 0.6; p.dodgeDir = mv || p.face; p.inv = 0.32; p.buf = null;
       sfx.roll();
       burst(p.x, GROUND, 6, 'dust');
@@ -1413,8 +1685,14 @@ function updatePlayer(dt) {
   }
 
   switch (p.state) {
+    case 'crouch':
+      if (mv) p.face = mv;
+      p.vx = lerp(p.vx, mv * 80, damp(0.001, dt));
+      if (!keys.down || !p.onGround) { p.state = 'idle'; p.t = 0; }
+      break;
     case 'idle':
     case 'run':
+      if (keys.down && p.onGround) { p.state = 'crouch'; p.t = 0; break; }
       if (mv) {
         p.face = mv;
         p.vx = lerp(p.vx, mv * 240, damp(0.0005, dt));
@@ -1424,19 +1702,29 @@ function updatePlayer(dt) {
         p.state = 'idle';
       }
       break;
-    case 'attack':
+    case 'attack': {
+      const L = w.light;
       p.vx *= Math.pow(0.01, dt);
-      if (p.t >= 0.126 && p.t <= 0.231) playerHits(110, 22, 170, false);
-      if (p.t > 0.28 && p.buf === 'attack' && p.st > 0) startAttack(mv);
-      else if (p.t >= 0.42) { p.state = 'idle'; p.t = 0; }
+      if (w.id === 'gun') { if (!p.fired && p.t >= L.fire) fireGun(L, false); }
+      else if (p.t >= L.from && p.t <= L.to) playerHits(L.range, L.dmg, L.kb, false);
+      if (p.t > L.dur * 0.68 && p.buf === 'attack' && p.st > 0 && w.id !== 'gun') startAttack(mv);
+      else if (p.t >= L.dur) { p.state = keys.down ? 'crouch' : 'idle'; p.t = 0; }
       break;
-    case 'heavy':
-      if (p.t < 0.38) p.vx *= Math.pow(0.001, dt);
-      else if (!p.lunged) { p.lunged = true; p.vx = p.face * 280; sfx.heavy(); }
-      else p.vx *= Math.pow(0.02, dt);
-      if (p.t >= 0.4 && p.t <= 0.56) playerHits(140, 62, 330, true);
-      if (p.t >= 0.82) { p.state = 'idle'; p.t = 0; }
+    }
+    case 'heavy': {
+      const Hv = w.heavy;
+      const wind = w.id === 'gun' ? Hv.fire : Hv.from - 0.02;
+      if (p.t < wind) p.vx *= Math.pow(0.001, dt);
+      else if (!p.lunged) {
+        p.lunged = true;
+        if (Hv.lunge) { p.vx = p.face * Hv.lunge; sfx.heavy(); }
+      } else p.vx *= Math.pow(0.02, dt);
+      if (w.id === 'gun') { if (!p.fired && p.t >= Hv.fire) fireGun(Hv, true); }
+      else if (p.t >= Hv.from && p.t <= Hv.to) playerHits(Hv.range, Hv.dmg, Hv.kb, true, Hv.both);
+      if (w.id === 'scythe' && p.t > Hv.from && p.t < Hv.to && Math.random() < dt * 30) sfx.whiff();
+      if (p.t >= Hv.dur) { p.state = 'idle'; p.t = 0; }
       break;
+    }
     case 'dodge':
       p.vx = p.dodgeDir * lerp(500, 140, p.t / 0.4);
       p.trail.push({ x: p.x, a: 0.35 });
@@ -1470,6 +1758,7 @@ function updatePlayer(dt) {
   p.x = clamp(p.x, 30, WORLD - 30);
 
   const spending = p.state === 'attack' || p.state === 'heavy' || p.state === 'dodge';
+  if (p.state === 'crouch') p.st = Math.min(100, p.st + 10 * dt);
   p.stDelay -= dt;
   if (!spending && p.stDelay <= 0) p.st = Math.min(100, p.st + 48 * dt);
   p.st = Math.max(0, p.st);
@@ -1509,7 +1798,10 @@ function updateGhoul(e, dt) {
     case 'strike':
       if (!e.struck && e.t > 0.05) {
         e.struck = true;
-        if (Math.abs(P.x - (e.x + e.face * 30)) < 46 && P.y > GROUND - 60) hurtPlayer(10 + wave * 1.5, e.face);
+        if (Math.abs(P.x - (e.x + e.face * 30)) < 46 && P.y > GROUND - 60) {
+          if (P.state === 'crouch') { sfx.whiff(); burst(P.x, GROUND - 40, 4, 'spark', e.face); }
+          else hurtPlayer(10 + wave * 1.5, e.face);
+        }
       }
       if (e.t >= 0.2) { e.state = 'recover'; e.t = 0; }
       break;
@@ -1669,6 +1961,9 @@ function update(dt) {
     P.face = Math.cos(time * 0.06) >= 0 ? 1 : -1;
     for (const e of enemies) updateGhoul(e, dt);
     if (pressed.start || pressed.attack || pressed.jump) reset();
+    else updateCloth(dt);
+    updateBats(dt);
+    zoom = lerp(zoom, 1.1, damp(0.3, dt));
     ambient(dt);
     updateParticles(dt);
     return;
@@ -1683,6 +1978,11 @@ function update(dt) {
 
   playT += dt;
   updatePlayer(dt);
+  updateCloth(dt);
+  updateBats(dt);
+  const bossUp = enemies.some(e => e.type === 'bloom' && !e.dead);
+  zoom = lerp(zoom, bossUp ? 1.04 : 1.16, damp(0.3, dt));
+  zoomKick *= Math.pow(0.002, dt);
   for (const e of enemies) (e.type === 'ghoul' ? updateGhoul : updateBloom)(e, dt);
   const gs = enemies.filter(e => e.type === 'ghoul' && !e.dead);
   for (let i = 0; i < gs.length; i++) {
@@ -1739,7 +2039,7 @@ function drawSky() {
   ctx.globalAlpha = 1;
   ctx.save();
   ctx.globalCompositeOperation = 'screen';
-  ctx.globalAlpha = 0.55 + Math.sin(time * 0.4) * 0.12;
+  ctx.globalAlpha = (POST ? 0.25 : 0.55) + Math.sin(time * 0.4) * 0.1;
   ctx.drawImage(RAYS, 0, 0, W, H);
   ctx.restore();
 }
@@ -1986,6 +2286,62 @@ function drawShadow(wx, footY, w, alpha = 0.55) {
   ctx.fill();
 }
 
+function playerPose(p) {
+  const st = p.state, t = p.t;
+  const run = clamp(Math.abs(p.vx) / 240, 0, 1);
+  const w = WEAPONS[p.weapon];
+  let crouch = 0, tilt = 0;
+  if (st === 'heavy') {
+    const wind = w.id === 'gun' ? w.heavy.fire : w.heavy.from;
+    if (t < wind) crouch = ease(t / wind) * 6;
+  }
+  if (st === 'attack') tilt = Math.sin(clamp(t / w.light.dur, 0, 1) * Math.PI) * (w.id === 'gun' ? -0.05 : 0.12);
+  if (st === 'dodge') { crouch = 16; tilt = 0.45; }
+  if (st === 'crouch') { crouch = 24 + Math.sin(time * 2) * 0.6; tilt = 0.14; }
+  if (st === 'hurt') tilt = -0.18;
+  if (st === 'heal') crouch = 5;
+  if (st === 'run') tilt = 0.08 * run;
+  if (st === 'dead') tilt = -Math.min(1, t / 0.7) * 1.45;
+  const bob = st === 'run' ? Math.abs(Math.sin(p.walk * 2)) * -2.5 : Math.sin(time * 2) * 0.6;
+  return { crouch, tilt, bob };
+}
+
+function poseToWorld(p, pose, lx, ly) {
+  const c = Math.cos(pose.tilt), s = Math.sin(pose.tilt);
+  return [p.x + (lx * c - (ly + pose.crouch) * s) * p.face, p.y + 6 + lx * s + (ly + pose.crouch) * c];
+}
+
+function weaponAngle(p) {
+  const w = WEAPONS[p.weapon], t = p.t;
+  if (w.id === 'gun') {
+    if (p.state === 'attack' || p.state === 'heavy') {
+      const fire = (p.state === 'attack' ? w.light : w.heavy).fire;
+      if (t < fire) return lerp(0.3, -0.04, ease(t / fire));
+      const k = (t - fire) / 0.32;
+      return -0.04 - (p.state === 'heavy' ? 1 : 0.55) * Math.max(0, 1 - k) * Math.min(1, k * 8);
+    }
+    if (p.state === 'crouch') return -0.02;
+    if (p.state === 'run') return 0.55 + Math.sin(p.walk * 2) * 0.05;
+    if (p.state === 'idle') return 0.32 + Math.sin(time * 1.8) * 0.03;
+  }
+  if (w.id === 'scythe') {
+    if (p.state === 'attack') {
+      const k = t / w.light.dur;
+      if (k < 0.34) return lerp(0.35, -2.3, ease(k / 0.34));
+      if (k < 0.6) return lerp(-2.3, 1.25, ease((k - 0.34) / 0.26));
+      return lerp(1.25, 0.35, ease(Math.min(1, (k - 0.6) / 0.4)));
+    }
+    if (p.state === 'heavy') {
+      const Hv = w.heavy;
+      if (t < Hv.from) return lerp(0.35, -1.6, ease(t / Hv.from));
+      if (t < Hv.to) return -1.6 + ease((t - Hv.from) / (Hv.to - Hv.from)) * (TAU + 0.9);
+      return lerp(TAU - 0.7, TAU + 0.35, ease(Math.min(1, (t - Hv.to) / (Hv.dur - Hv.to))));
+    }
+  }
+  if (p.state === 'crouch') return 0.75;
+  return axeAngle(p);
+}
+
 function axeAngle(p) {
   const t = p.t;
   switch (p.state) {
@@ -2096,6 +2452,110 @@ function drawAxe(g, a, blood) {
   g.restore();
 }
 
+function drawScythe(g, a, blood) {
+  g.save();
+  g.rotate(a);
+  g.lineCap = 'round';
+  const shaft = g.createLinearGradient(0, -2, 0, 2);
+  shaft.addColorStop(0, '#4d3a30');
+  shaft.addColorStop(1, '#16100c');
+  g.strokeStyle = shaft;
+  g.lineWidth = 3.6;
+  g.beginPath();
+  g.moveTo(-42, 0);
+  g.quadraticCurveTo(60, -4, 152, 0);
+  g.stroke();
+  // vertebrae bound along the haft
+  for (let x = 40; x < 140; x += 11) {
+    g.fillStyle = '#b9b1c6';
+    g.beginPath();
+    g.ellipse(x, -0.5, 3.2, 2.6, 0, 0, TAU);
+    g.fill();
+    g.fillStyle = 'rgba(30,20,40,0.6)';
+    g.fillRect(x - 0.5, -2.5, 1, 4);
+  }
+  const steel = g.createLinearGradient(100, 0, 150, 60);
+  steel.addColorStop(0, '#1b1d28');
+  steel.addColorStop(0.5, '#454a62');
+  steel.addColorStop(1, '#9aa1c2');
+  g.fillStyle = steel;
+  g.beginPath();
+  g.moveTo(148, -4);
+  g.quadraticCurveTo(166, 44, 86, 70);
+  g.quadraticCurveTo(140, 38, 140, 4);
+  g.closePath();
+  g.fill();
+  if (blood > 0) {
+    g.fillStyle = `rgba(120,8,22,${Math.min(0.95, blood)})`;
+    g.beginPath();
+    g.moveTo(144, 8);
+    g.quadraticCurveTo(140, 40, 92, 66);
+    g.quadraticCurveTo(128, 48, 138 + blood * 6, 14);
+    g.fill();
+  }
+  g.strokeStyle = 'rgba(232,238,255,0.95)';
+  g.lineWidth = 1.8;
+  g.beginPath();
+  g.moveTo(140, 5);
+  g.quadraticCurveTo(140, 38, 88, 69);
+  g.stroke();
+  g.fillStyle = '#d6cee2';
+  g.beginPath();
+  g.arc(150, -2, 5, 0, TAU);
+  g.fill();
+  g.fillStyle = '#120c16';
+  g.fillRect(148, -3.5, 1.5, 2);
+  g.fillRect(151, -3.5, 1.5, 2);
+  g.restore();
+}
+
+function drawGun(g, a) {
+  g.save();
+  g.rotate(a);
+  const wood = g.createLinearGradient(0, -6, 0, 8);
+  wood.addColorStop(0, '#6a4a34');
+  wood.addColorStop(1, '#22150e');
+  g.fillStyle = wood;
+  g.beginPath();
+  g.moveTo(-26, -1);
+  g.lineTo(8, -4);
+  g.lineTo(10, 4);
+  g.lineTo(-6, 5);
+  g.lineTo(-24, 11);
+  g.closePath();
+  g.fill();
+  const iron = g.createLinearGradient(0, -4, 0, 4);
+  iron.addColorStop(0, '#8d90a6');
+  iron.addColorStop(0.5, '#3a3c4c');
+  iron.addColorStop(1, '#16161e');
+  g.fillStyle = iron;
+  g.fillRect(4, -3.5, 50, 6);
+  g.beginPath();
+  g.moveTo(52, -4);
+  g.lineTo(64, -8);
+  g.lineTo(64, 7);
+  g.lineTo(52, 3);
+  g.closePath();
+  g.fill();
+  g.fillStyle = '#0a0a0e';
+  g.fillRect(63, -6, 1.5, 11);
+  g.fillStyle = '#a88a4a';
+  for (const x of [10, 30, 48]) g.fillRect(x, -4.5, 3, 8);
+  g.fillStyle = '#2a2a34';
+  g.beginPath();
+  g.moveTo(4, -4);
+  g.lineTo(0, -10);
+  g.lineTo(5, -9);
+  g.lineTo(8, -4);
+  g.fill();
+  g.strokeStyle = '#2a2a34';
+  g.lineWidth = 1.2;
+  g.beginPath();
+  g.arc(4, 5, 4, 0, Math.PI);
+  g.stroke();
+  g.restore();
+}
+
 function drawPlayerBody(g, p, ghost) {
   const C = ghost
     ? { cloakA: '#6f8cff', cloakB: '#5f7cff', body: '#6f8cff', dark: '#5f7cff', hat: '#6f8cff', rim: 'rgba(0,0,0,0)', trim: '#6f8cff' }
@@ -2103,21 +2563,14 @@ function drawPlayerBody(g, p, ghost) {
   g.scale(p.face, 1);
   const st = p.state, t = p.t;
   const run = clamp(Math.abs(p.vx) / 240, 0, 1);
-  let crouch = 0, tilt = 0;
-  if (st === 'heavy' && t < 0.4) crouch = ease(t / 0.4) * 6;
-  if (st === 'attack') tilt = Math.sin(clamp(t / 0.42, 0, 1) * Math.PI) * 0.12;
-  if (st === 'dodge') { crouch = 16; tilt = 0.45; }
-  if (st === 'hurt') tilt = -0.18;
-  if (st === 'heal') crouch = 5;
-  if (st === 'run') tilt = 0.08 * run;
-  if (st === 'dead') tilt = -Math.min(1, t / 0.7) * 1.45;
+  const pose = playerPose(p);
+  const { crouch, tilt, bob } = pose;
   g.rotate(tilt);
   g.translate(0, crouch);
-  const bob = st === 'run' ? Math.abs(Math.sin(p.walk * 2)) * -2.5 : Math.sin(time * 2) * 0.6;
-  const cos = Math.cos(tilt), sin = Math.sin(tilt);
-  const toWorld = (lx, ly) => [p.x + (lx * cos - (ly + crouch) * sin) * p.face, p.y + 6 + lx * sin + (ly + crouch) * cos];
+  const toWorld = (lx, ly) => poseToWorld(p, pose, lx, ly);
 
-  // scarf tail
+  // scarf tail and cloak (the live hunter wears simulated cloth instead, drawn before this)
+  if (ghost) {
   const flow = run * 18 + (p.onGround ? 0 : 10) + Math.sin(time * 3) * 2 + (st === 'dodge' ? 14 : 0);
   g.fillStyle = ghost ? C.body : '#2a1d2a';
   g.beginPath();
@@ -2163,6 +2616,7 @@ function drawPlayerBody(g, p, ghost) {
     g.quadraticCurveTo(-20 - flow * 0.5, -52, -22 - flow, -12 + flow * 0.2);
     g.stroke();
   }
+  }
 
   // legs
   const sw = Math.sin(p.walk) * run;
@@ -2170,10 +2624,13 @@ function drawPlayerBody(g, p, ghost) {
   let ff = [6 + sw * 14, -Math.max(0, -Math.cos(p.walk)) * 6 * run];
   if (!p.onGround) { fb = [-10, -10]; ff = [10, -16]; }
   if (st === 'dodge' || st === 'heavy') { fb = [-14, 0]; ff = [14, 0]; }
+  if (st === 'crouch') { fb = [-12 - sw * 6, 0]; ff = [13 + sw * 6, 0]; }
+  // keep the feet planted while the body sinks
+  if (p.onGround) { fb[1] -= crouch; ff[1] -= crouch; }
   g.lineCap = 'round';
   for (const [f, off, col] of [[fb, -2, C.dark], [ff, 3, ghost ? C.dark : '#17141d']]) {
     const hip = [off, -34 + bob];
-    const knee = [(hip[0] + f[0]) / 2 + 5, (hip[1] + f[1]) / 2 - 2];
+    const knee = [(hip[0] + f[0]) / 2 + 5 + crouch * 0.75, (hip[1] + f[1]) / 2 - 2];
     g.strokeStyle = col;
     g.lineWidth = 7;
     g.beginPath();
@@ -2342,29 +2799,34 @@ function drawPlayerBody(g, p, ghost) {
     if (!p.ghostPass) [p.lx, p.ly] = toWorld(lx, ly + 7);
   }
 
-  // arms and axe
-  const a = axeAngle(p);
-  const pv = [4 + Math.cos(a) * 18, -64 + bob + Math.sin(a) * 18];
-  const h2 = [pv[0] + Math.cos(a) * 24, pv[1] + Math.sin(a) * 24];
-  const swinging = (st === 'attack' && t > 0.12 && t < 0.25) || (st === 'heavy' && t > 0.38 && t < 0.56);
+  // arms and weapon
+  const w = WEAPONS[p.weapon];
+  const a = weaponAngle(p);
+  const reach = w.id === 'gun' ? 14 : 18;
+  const pv = [4 + Math.cos(a) * reach, -64 + bob + Math.sin(a) * reach];
+  const grip = w.id === 'gun' ? 20 : 24;
+  const h2 = [pv[0] + Math.cos(a) * grip, pv[1] + Math.sin(a) * grip];
+  const L = w.light, Hv = w.heavy;
+  const swinging = w.id !== 'gun' && ((st === 'attack' && t > L.from - 0.01 && t < L.to + 0.01) || (st === 'heavy' && t > Hv.from - 0.02 && t < Hv.to));
   if (swinging && !ghost) {
+    const outer = w.id === 'scythe' ? 172 : 145, inner = w.id === 'scythe' ? 110 : 100, arc = st === 'heavy' && w.id === 'scythe' ? 2.4 : 0.9;
     g.save();
     g.globalCompositeOperation = 'lighter';
-    const grd = g.createRadialGradient(pv[0], pv[1], 70, pv[0], pv[1], 145);
+    const grd = g.createRadialGradient(pv[0], pv[1], inner * 0.7, pv[0], pv[1], outer);
     grd.addColorStop(0, 'rgba(140,170,255,0)');
     grd.addColorStop(0.75, 'rgba(170,195,255,0.08)');
     grd.addColorStop(1, 'rgba(230,240,255,0.35)');
     g.fillStyle = grd;
     g.beginPath();
-    g.arc(pv[0], pv[1], 145, a - 0.9, a);
-    g.arc(pv[0], pv[1], 100, a, a - 0.9, true);
+    g.arc(pv[0], pv[1], outer, a - arc, a);
+    g.arc(pv[0], pv[1], inner, a, a - arc, true);
     g.fill();
     if (p.blood > 0.3 && gore) {
       g.globalCompositeOperation = 'source-over';
       g.strokeStyle = 'rgba(150,10,25,0.55)';
       g.lineWidth = 3;
       g.beginPath();
-      g.arc(pv[0], pv[1], 130, a - 0.9, a);
+      g.arc(pv[0], pv[1], outer - 15, a - arc, a);
       g.stroke();
     }
     g.restore();
@@ -2378,11 +2840,37 @@ function drawPlayerBody(g, p, ghost) {
   g.stroke();
   g.save();
   g.translate(pv[0], pv[1]);
-  drawAxe(g, a, gore && !ghost ? p.blood : 0);
+  const bl = gore && !ghost ? p.blood : 0;
+  if (w.id === 'axe') drawAxe(g, a, bl);
+  else if (w.id === 'scythe') drawScythe(g, a, bl);
+  else drawGun(g, a);
+  if (w.id === 'gun' && p.flash > 0 && !ghost) {
+    // muzzle flash
+    g.rotate(a);
+    g.globalCompositeOperation = 'lighter';
+    const k = p.flash / 0.16;
+    const fl = g.createRadialGradient(66, 0, 0, 66, 0, 46 * k + 10);
+    fl.addColorStop(0, 'rgba(255,250,220,1)');
+    fl.addColorStop(0.3, 'rgba(255,190,90,0.85)');
+    fl.addColorStop(1, 'rgba(255,90,30,0)');
+    g.fillStyle = fl;
+    g.beginPath();
+    g.moveTo(62, 0);
+    g.lineTo(110 * k + 70, -14 * k);
+    g.lineTo(140 * k + 70, 0);
+    g.lineTo(110 * k + 70, 14 * k);
+    g.closePath();
+    g.fill();
+    g.beginPath();
+    g.arc(66, 0, 22 * k + 6, 0, TAU);
+    g.fill();
+  }
   g.restore();
   if (!ghost && !p.ghostPass) {
-    const bx = pv[0] + Math.cos(a) * 112 - Math.sin(a) * 30, by = pv[1] + Math.sin(a) * 112 + Math.cos(a) * 30;
-    [p.bladeX, p.bladeY] = toWorld(bx, by);
+    const tip = w.id === 'scythe' ? [128, 44] : w.id === 'gun' ? [66, 0] : [112, 30];
+    const bx = pv[0] + Math.cos(a) * tip[0] - Math.sin(a) * tip[1], by = pv[1] + Math.sin(a) * tip[0] + Math.cos(a) * tip[1];
+    if (w.id === 'gun') [p.muzzleX, p.muzzleY] = toWorld(bx, by);
+    else [p.bladeX, p.bladeY] = toWorld(bx, by);
   }
   g.strokeStyle = ghost ? C.body : '#2a2634';
   g.beginPath();
@@ -2738,7 +3226,7 @@ function drawPlayer() {
     renderActor(ABUF, ab, 170, 290, tr.x, footY, g => drawPlayerBody(g, P, true), { light: false, alpha: tr.a * 0.45 });
   }
   P.ghostPass = false;
-  renderActor(ABUF, ab, 170, 290, P.x, footY, g => drawPlayerBody(g, P, false), { flash: P.inv > 0.45 ? 0.4 : 0 });
+  renderActor(ABUF, ab, 170, 290, P.x, footY, g => { drawCloth(g); drawPlayerBody(g, P, false); }, { flash: P.inv > 0.45 ? 0.4 : 0 });
 }
 
 function drawSpikes() {
@@ -2830,7 +3318,9 @@ function drawParticles(additive, goreOnly = false) {
       const sx = p.x - camX;
       if (sx < -30 || sx > W + 30) continue;
       const k = p.life / p.max;
-      const a = p.type === 'ember' ? Math.sin(k * Math.PI) * (0.6 + 0.4 * Math.sin(time * 12 + p.seed * 7)) : 1 - k;
+      let a = p.type === 'ember' ? Math.sin(k * Math.PI) * (0.6 + 0.4 * Math.sin(time * 12 + p.seed * 7)) : 1 - k;
+      if (p.type === 'firefly') a = Math.sin(k * Math.PI) * (0.35 + 0.65 * Math.max(0, Math.sin(time * 3 + p.seed * 9)));
+      if (p.type === 'mote') a = Math.sin(k * Math.PI) * clamp(1 - Math.hypot(p.x - P.lx, p.y - P.ly) / 140, 0, 1) * 0.9;
       if (p.type === 'blood') {
         g.globalAlpha = 0.95;
         g.strokeStyle = p.col;
@@ -2929,6 +3419,10 @@ function collectLights() {
   for (const e of enemies) {
     if (e.type === 'bloom' && !e.dead) L.push({ x: e.x - camX, y: GROUND - 120 + e.lift, r: 140, s: 0.4, glow: 'rgba(170,110,255,0.14)', gr: 100 });
   }
+  if (P.flash > 0) {
+    const k = P.flash / 0.16;
+    L.push({ x: P.muzzleX - camX + P.face * 30, y: P.muzzleY, r: 340 * k + 80, s: 0.9 * Math.min(1, k * 1.5), glow: `rgba(255,170,80,${0.5 * k})`, gr: 160 * k + 30, core: k });
+  }
   for (const k of pickups) L.push({ x: k.x - camX, y: k.y - 5, r: 50, s: 0.5, glow: 'rgba(255,70,100,0.35)', gr: 26 });
   for (const s of spikes) if (s.t > 0 && s.t < 0.8) L.push({ x: s.x - camX, y: GROUND, r: 60, s: 0.5 });
   L.push({ x: MOON.x, y: MOON.y + 60, r: 420, s: 0.35 });
@@ -3024,63 +3518,59 @@ function drawGrain() {
 
 function drawScreenSplats() {
   for (const s of screenSplats) {
-    ctx.save();
-    ctx.globalAlpha = clamp(s.a * 1.1, 0, 0.92);
-    ctx.translate(s.x, s.y);
-    ctx.rotate(s.rot);
-    ctx.scale(s.s, s.s);
-    ctx.drawImage(s.img, -160, -160, 320, 320);
-    ctx.restore();
+    hud.save();
+    hud.globalAlpha = clamp(s.a * 1.1, 0, 0.92);
+    hud.translate(s.x, s.y);
+    hud.rotate(s.rot);
+    hud.scale(s.s, s.s);
+    hud.drawImage(s.img, -160, -160, 320, 320);
+    hud.restore();
   }
 }
 
 /* ---------- HUD ---------- */
 
 function bar(x, y, w, h, frac, lag, col1, col2) {
-  ctx.fillStyle = 'rgba(5,3,10,0.7)';
-  ctx.fillRect(x - 3, y - 3, w + 6, h + 6);
+  hud.fillStyle = 'rgba(5,3,10,0.7)';
+  hud.fillRect(x - 3, y - 3, w + 6, h + 6);
   if (lag !== null) {
-    ctx.fillStyle = 'rgba(230,200,180,0.6)';
-    ctx.fillRect(x, y, w * clamp(lag, 0, 1), h);
+    hud.fillStyle = 'rgba(230,200,180,0.6)';
+    hud.fillRect(x, y, w * clamp(lag, 0, 1), h);
   }
-  const g = ctx.createLinearGradient(x, 0, x + w, 0);
+  const g = hud.createLinearGradient(x, 0, x + w, 0);
   g.addColorStop(0, col1);
   g.addColorStop(1, col2);
-  ctx.fillStyle = g;
-  ctx.fillRect(x, y, w * clamp(frac, 0, 1), h);
-  ctx.fillStyle = 'rgba(255,255,255,0.18)';
-  ctx.fillRect(x, y, w * clamp(frac, 0, 1), Math.max(1, h * 0.3));
-  ctx.strokeStyle = 'rgba(180,160,200,0.5)';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(x - 3.5, y - 3.5, w + 7, h + 7);
-  ctx.fillStyle = 'rgba(180,160,200,0.7)';
+  hud.fillStyle = g;
+  hud.fillRect(x, y, w * clamp(frac, 0, 1), h);
+  hud.fillStyle = 'rgba(255,255,255,0.18)';
+  hud.fillRect(x, y, w * clamp(frac, 0, 1), Math.max(1, h * 0.3));
+  hud.strokeStyle = 'rgba(180,160,200,0.5)';
+  hud.lineWidth = 1;
+  hud.strokeRect(x - 3.5, y - 3.5, w + 7, h + 7);
+  hud.fillStyle = 'rgba(180,160,200,0.7)';
   for (const ex of [x - 3.5, x + w + 3.5]) {
-    ctx.beginPath();
-    ctx.moveTo(ex, y - 7);
-    ctx.lineTo(ex + 3, y + h / 2);
-    ctx.lineTo(ex, y + h + 7);
-    ctx.lineTo(ex - 3, y + h / 2);
-    ctx.fill();
+    hud.beginPath();
+    hud.moveTo(ex, y - 7);
+    hud.lineTo(ex + 3, y + h / 2);
+    hud.lineTo(ex, y + h + 7);
+    hud.lineTo(ex - 3, y + h / 2);
+    hud.fill();
   }
 }
 
 function centreText(text, y, size, colour, weight = 700, spacing = 0, glow = 0) {
-  ctx.font = `${weight} ${size}px ${SERIF}`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  if ('letterSpacing' in ctx) ctx.letterSpacing = spacing + 'px';
-  ctx.fillStyle = colour;
-  ctx.fillText(text, W / 2, y);
-  if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+  hud.font = `${weight} ${size}px ${SERIF}`;
+  hud.textAlign = 'center';
+  hud.textBaseline = 'middle';
+  if ('letterSpacing' in hud) hud.letterSpacing = spacing + 'px';
+  hud.fillStyle = colour;
   if (glow) {
-    gg.font = ctx.font;
-    gg.textAlign = 'center';
-    gg.textBaseline = 'middle';
-    if ('letterSpacing' in gg) gg.letterSpacing = spacing + 'px';
-    gg.fillStyle = glow;
-    gg.fillText(text, W / 2, y);
-    if ('letterSpacing' in gg) gg.letterSpacing = '0px';
+    hud.shadowColor = glow;
+    hud.shadowBlur = 26;
   }
+  hud.fillText(text, W / 2, y);
+  hud.shadowBlur = 0;
+  if ('letterSpacing' in hud) hud.letterSpacing = '0px';
 }
 
 function drawHUD() {
@@ -3088,97 +3578,399 @@ function drawHUD() {
   bar(30, 46, 200, 6, P.st / 100, null, '#4f6a55', '#9cbc90');
   for (let i = 0; i < 5; i++) {
     const x = 34 + i * 17, y = 68;
-    ctx.globalAlpha = i < P.vials ? 1 : 0.2;
-    const vg = ctx.createRadialGradient(x - 2, y + 2, 0, x, y + 4, 7);
+    hud.globalAlpha = i < P.vials ? 1 : 0.2;
+    const vg = hud.createRadialGradient(x - 2, y + 2, 0, x, y + 4, 7);
     vg.addColorStop(0, '#ff7a8a');
     vg.addColorStop(1, '#8e0f22');
-    ctx.fillStyle = vg;
-    ctx.beginPath();
-    ctx.ellipse(x, y + 4, 5.5, 6.5, 0, 0, TAU);
-    ctx.fill();
-    ctx.fillStyle = '#5a4a40';
-    ctx.fillRect(x - 2, y - 6, 4, 4);
+    hud.fillStyle = vg;
+    hud.beginPath();
+    hud.ellipse(x, y + 4, 5.5, 6.5, 0, 0, TAU);
+    hud.fill();
+    hud.fillStyle = '#5a4a40';
+    hud.fillRect(x - 2, y - 6, 4, 4);
   }
-  ctx.globalAlpha = 1;
-  ctx.textAlign = 'right';
-  ctx.textBaseline = 'top';
-  ctx.font = `700 24px ${SERIF}`;
-  ctx.fillStyle = '#e4d9f0';
-  ctx.fillText(wave ? 'Wave ' + wave : '', W - 30, 18);
-  ctx.font = `500 17px ${SERIF}`;
-  ctx.fillStyle = '#bcb0d4';
-  ctx.fillText('Echoes ' + score, W - 30, 46);
+  hud.globalAlpha = 1;
+  drawWeaponPanel();
+  hud.textAlign = 'right';
+  hud.textBaseline = 'top';
+  hud.font = `700 24px ${SERIF}`;
+  hud.fillStyle = '#e4d9f0';
+  hud.fillText(wave ? 'Wave ' + wave : '', W - 30, 18);
+  hud.font = `500 17px ${SERIF}`;
+  hud.fillStyle = '#bcb0d4';
+  hud.fillText('Echoes ' + score, W - 30, 46);
 
   const boss = enemies.find(e => e.type === 'bloom' && !e.dead);
   if (boss) {
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'bottom';
-    ctx.font = `600 18px ${SERIF}`;
-    ctx.fillStyle = '#e1d7ee';
-    ctx.fillText('The Hollow Bloom', W / 2 - 260, H - 58);
+    hud.textAlign = 'left';
+    hud.textBaseline = 'bottom';
+    hud.font = `600 18px ${SERIF}`;
+    hud.fillStyle = '#e1d7ee';
+    hud.fillText('The Hollow Bloom', W / 2 - 260, H - 58);
     bar(W / 2 - 260, H - 50, 520, 8, boss.hp / boss.maxHp, null, '#4a0c1c', '#a32a3a');
   }
 
   if (banner.t < 3.2) {
     const a = banner.t < 0.5 ? banner.t / 0.5 : banner.t > 2.5 ? 1 - (banner.t - 2.5) / 0.7 : 1;
-    ctx.globalAlpha = clamp(a, 0, 1);
-    gg.globalAlpha = ctx.globalAlpha;
+    hud.globalAlpha = clamp(a, 0, 1);
     centreText(banner.text, H * 0.3, 54, '#efe5f8', 700, 3, 'rgba(200,170,255,0.6)');
     centreText(banner.sub, H * 0.3 + 42, 20, '#b6aacd', 500, 1);
-    ctx.globalAlpha = 1;
-    gg.globalAlpha = 1;
+    hud.globalAlpha = 1;
   }
 
   if (playT < 12 && mode === 'play') {
-    ctx.globalAlpha = clamp((12 - playT) / 2, 0, 0.85);
-    centreText('A D move  ·  W jump  ·  J or click to swing  ·  K or right click heavy  ·  Shift roll  ·  E drink vial', H - 18, 15, '#cbc0dc', 500);
-    ctx.globalAlpha = 1;
+    hud.globalAlpha = clamp((12 - playT) / 2, 0, 0.85);
+    centreText('A D move  ·  W jump  ·  S duck  ·  J or click attack  ·  K or right click heavy  ·  Shift roll  ·  E vial  ·  Q or 1 2 3 weapons', H - 18, 15, '#cbc0dc', 500);
+    hud.globalAlpha = 1;
   }
   const notes = [];
   if (muted) notes.push('Sound off (M)');
   if (!gore) notes.push('Blood off (B)');
   if (notes.length) {
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    ctx.font = `500 14px ${SERIF}`;
-    ctx.fillStyle = '#8f84a6';
-    ctx.fillText(notes.join('  ·  '), 30, 86);
+    hud.textAlign = 'left';
+    hud.textBaseline = 'top';
+    hud.font = `500 14px ${SERIF}`;
+    hud.fillStyle = '#8f84a6';
+    hud.fillText(notes.join('  ·  '), 30, 134);
+  }
+}
+
+function weaponIcon(g, id, x, y, s) {
+  g.save();
+  g.translate(x, y);
+  g.scale(s, s);
+  g.rotate(-0.7);
+  g.lineCap = 'round';
+  g.strokeStyle = '#6a5040';
+  g.lineWidth = 2.4;
+  g.beginPath();
+  g.moveTo(-14, 0);
+  g.lineTo(id === 'gun' ? 6 : 14, 0);
+  g.stroke();
+  g.fillStyle = '#c9cde0';
+  g.beginPath();
+  if (id === 'axe') { g.moveTo(8, 0); g.quadraticCurveTo(4, 8, 2, 12); g.quadraticCurveTo(12, 14, 18, 6); g.lineTo(14, 0); }
+  else if (id === 'scythe') { g.moveTo(14, -1); g.quadraticCurveTo(20, 12, -4, 18); g.quadraticCurveTo(12, 10, 11, 1); }
+  else { g.rect(2, -2.2, 16, 4.4); g.moveTo(17, -3.5); g.lineTo(21, -5); g.lineTo(21, 5); g.lineTo(17, 3.5); }
+  g.fill();
+  g.restore();
+}
+
+function drawWeaponPanel() {
+  const x = 30, y = 92;
+  WEAPONS.forEach((w, i) => {
+    const on = i === P.weapon;
+    hud.globalAlpha = on ? 1 : 0.38;
+    hud.fillStyle = on ? 'rgba(30,20,48,0.75)' : 'rgba(10,6,18,0.5)';
+    hud.fillRect(x + i * 40, y, 34, 34);
+    hud.strokeStyle = on ? 'rgba(210,190,240,0.8)' : 'rgba(150,130,180,0.4)';
+    hud.lineWidth = 1;
+    hud.strokeRect(x + i * 40 + 0.5, y + 0.5, 33, 33);
+    weaponIcon(hud, w.id, x + i * 40 + 17, y + 17, 0.95);
+    hud.font = `600 11px ${SERIF}`;
+    hud.textAlign = 'left';
+    hud.textBaseline = 'top';
+    hud.fillStyle = '#d9cfe8';
+    hud.fillText(String(i + 1), x + i * 40 + 3, y + 2);
+  });
+  hud.globalAlpha = 1;
+  const w = WEAPONS[P.weapon];
+  hud.font = `600 16px ${SERIF}`;
+  hud.fillStyle = '#e4d9f0';
+  hud.textBaseline = 'top';
+  hud.fillText(w.name, x + 128, y + 2);
+  if (w.id === 'gun') {
+    for (let i = 0; i < AMMO_MAX; i++) {
+      hud.fillStyle = i < P.ammo ? '#d8b56a' : 'rgba(120,110,140,0.35)';
+      hud.fillRect(x + 128 + i * 8, y + 23, 5, 8);
+    }
+  } else {
+    hud.font = `500 13px ${SERIF}`;
+    hud.fillStyle = '#a99ec2';
+    hud.fillText(w.note, x + 128, y + 21);
+  }
+  if (P.swapT < 1.2) {
+    hud.globalAlpha = 1 - P.swapT / 1.2;
+    centreText(w.name, H * 0.66, 26, '#efe5f8', 700, 2, 'rgba(200,170,255,0.7)');
+    hud.globalAlpha = 1;
   }
 }
 
 function drawTitle() {
-  ctx.fillStyle = 'rgba(6,3,14,0.3)';
-  ctx.fillRect(0, 0, W, H);
+  hud.fillStyle = 'rgba(6,3,14,0.3)';
+  hud.fillRect(0, 0, W, H);
   const pulse = 0.75 + Math.sin(time * 2.2) * 0.25;
   centreText('HOLLOW LANTERN', H * 0.3, 82, '#f1e8fa', 700, 9, 'rgba(190,160,255,0.55)');
   centreText('A hunt through the Vale of Bones', H * 0.3 + 54, 22, '#c0b4d8', 500, 2);
-  ctx.globalAlpha = pulse;
+  hud.globalAlpha = pulse;
   centreText('Press Enter, click or tap to begin', H * 0.62, 22, '#e0d6ee', 600, 1);
-  ctx.globalAlpha = 1;
-  centreText('A D move  ·  W jump  ·  J swing  ·  K heavy  ·  Shift roll  ·  E vial  ·  P pause  ·  M sound  ·  B blood', H * 0.62 + 36, 15, '#a296bb', 500);
+  hud.globalAlpha = 1;
+  centreText('A D move  ·  W jump  ·  S duck  ·  J attack  ·  K heavy  ·  Shift roll  ·  E vial  ·  Q weapons  ·  P pause  ·  M sound  ·  B blood', H * 0.62 + 36, 15, '#a296bb', 500);
   if (best) centreText('Best hunt: ' + best + ' echoes', H * 0.62 + 62, 15, '#a296bb', 500);
 }
 
 function drawDeath() {
   const a = clamp((deadT - 0.6) / 1.2, 0, 1);
-  ctx.globalAlpha = a;
-  const band = ctx.createLinearGradient(0, H * 0.34, 0, H * 0.6);
+  hud.globalAlpha = a;
+  const band = hud.createLinearGradient(0, H * 0.34, 0, H * 0.6);
   band.addColorStop(0, 'rgba(0,0,0,0)');
   band.addColorStop(0.3, 'rgba(0,0,0,0.7)');
   band.addColorStop(0.7, 'rgba(0,0,0,0.7)');
   band.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = band;
-  ctx.fillRect(0, H * 0.34, W, H * 0.26);
-  gg.globalAlpha = a;
+  hud.fillStyle = band;
+  hud.fillRect(0, H * 0.34, W, H * 0.26);
   centreText('YOU DIED', H * 0.47, 80, '#a5162a', 600, 12, 'rgba(255,40,60,0.45)');
-  gg.globalAlpha = 1;
-  ctx.globalAlpha = clamp((deadT - 1.6) / 0.8, 0, 1);
+  hud.globalAlpha = clamp((deadT - 1.6) / 0.8, 0, 1);
   centreText(`Wave ${wave}  ·  ${kills} slain  ·  ${score} echoes`, H * 0.64, 20, '#c8bcd8', 500, 1);
   centreText('Press Enter or tap to rise again', H * 0.64 + 30, 17, '#9a8fb3', 500);
-  ctx.globalAlpha = 1;
+  hud.globalAlpha = 1;
+}
+
+/* ---------- GPU post-processing ---------- */
+
+// The 2D scene is uploaded as a texture each frame and finished on the GPU:
+// soft bloom, crepuscular rays through the branches, drifting volumetric fog lit by
+// the lanterns, heat shimmer, lens fringing, a filmic grade, vignette and grain.
+function initPost(canvas) {
+  let gl = null;
+  try { gl = canvas.getContext('webgl', { alpha: false, antialias: false, depth: false, stencil: false, preserveDrawingBuffer: false }); } catch (e) { gl = null; }
+  if (!gl) return null;
+
+  const VS = 'attribute vec2 p; varying vec2 v; void main() { v = p * 0.5 + 0.5; gl_Position = vec4(p, 0.0, 1.0); }';
+  const HEAD = '#ifdef GL_FRAGMENT_PRECISION_HIGH\nprecision highp float;\n#else\nprecision mediump float;\n#endif\nvarying vec2 v;\n';
+  const NOISE = `
+    float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    float noise(vec2 p) {
+      vec2 i = floor(p), f = fract(p);
+      f = f * f * (3.0 - 2.0 * f);
+      return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
+    }
+    float fbm(vec2 p) {
+      float s = 0.0, a = 0.5;
+      for (int i = 0; i < 5; i++) { s += a * noise(p); p = p * 2.03 + vec2(1.7, 9.2); a *= 0.5; }
+      return s;
+    }`;
+
+  const PRE = HEAD + `
+    uniform sampler2D uScene, uGlow;
+    void main() {
+      vec3 s = texture2D(uScene, v).rgb;
+      vec3 b = max(s - vec3(0.74), 0.0) * 1.2;
+      gl_FragColor = vec4(texture2D(uGlow, v).rgb * 1.2 + b, 1.0);
+    }`;
+  const BLUR = HEAD + `
+    uniform sampler2D uTex; uniform vec2 uDir;
+    void main() {
+      vec3 c = texture2D(uTex, v).rgb * 0.227027;
+      c += (texture2D(uTex, v + uDir * 1.3846).rgb + texture2D(uTex, v - uDir * 1.3846).rgb) * 0.316216;
+      c += (texture2D(uTex, v + uDir * 3.2308).rgb + texture2D(uTex, v - uDir * 3.2308).rgb) * 0.070270;
+      gl_FragColor = vec4(c, 1.0);
+    }`;
+  const RAYS = HEAD + `
+    uniform sampler2D uScene; uniform vec2 uMoon; uniform float uK;
+    void main() {
+      vec2 uv = v;
+      vec2 dlt = (uv - uMoon) * (0.92 / 48.0);
+      float ill = 1.0;
+      vec3 acc = vec3(0.0);
+      for (int i = 0; i < 48; i++) {
+        uv -= dlt;
+        vec3 s = texture2D(uScene, uv).rgb;
+        float l = dot(s, vec3(0.3, 0.59, 0.11));
+        float m = smoothstep(0.42, 0.8, l) * smoothstep(0.35, 0.55, uv.y);
+        acc += s * m * ill;
+        ill *= 0.962;
+      }
+      gl_FragColor = vec4(acc * (uK / 48.0), 1.0);
+    }`;
+  const COMP = HEAD + NOISE + `
+    uniform sampler2D uScene, uBloom, uRays;
+    uniform vec2 uRes, uMoon;
+    uniform float uTime, uCam, uHurt, uLowHp, uFx;
+    uniform vec3 uLight, uFlash;
+    uniform vec4 uLamps[4];
+    vec3 tonemap(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
+    void main() {
+      vec2 asp = vec2(uRes.x / uRes.y, 1.0);
+      vec2 uv = v;
+      vec2 ld = (v - uLight.xy) * asp;
+      float lr = length(ld);
+      // heat shimmer above the lantern flame
+      float sh = smoothstep(0.14, 0.0, lr) * uLight.z * uFx;
+      uv += vec2(noise(v * 60.0 + vec2(0.0, -uTime * 4.0)) - 0.5, noise(v * 60.0 + vec2(5.0, -uTime * 5.0)) - 0.5) * 0.004 * sh;
+      vec2 c = uv - 0.5;
+      float ca = (0.0012 + uHurt * 0.01) * dot(c, c) * 4.0;
+      vec3 col;
+      col.r = texture2D(uScene, uv - c * ca).r;
+      col.g = texture2D(uScene, uv).g;
+      col.b = texture2D(uScene, uv + c * ca).b;
+
+      // light reaching the air from the lantern, the lamps and any muzzle flash
+      float lan = uLight.z * exp(-lr * lr * 14.0);
+      float lamps = 0.0;
+      for (int i = 0; i < 4; i++) {
+        vec2 q = (v - uLamps[i].xy) * asp;
+        lamps += uLamps[i].z * exp(-dot(q, q) * 26.0);
+      }
+      vec2 fq = (v - uFlash.xy) * asp;
+      float flash = uFlash.z * exp(-dot(fq, fq) * 9.0);
+      vec3 airLight = vec3(0.45, 0.62, 1.15) * (lan * 1.3 + lamps) + vec3(1.2, 0.7, 0.35) * flash;
+
+      // two drifting banks of ground fog, each scrolling with its own parallax
+      vec2 fp = vec2(v.x * asp.x, v.y);
+      float f1 = fbm(fp * vec2(1.6, 3.6) + vec2(uCam * 0.9 + uTime * 0.035, uTime * 0.01));
+      float f2 = fbm(fp * vec2(3.4, 6.5) + vec2(uCam * 1.4 - uTime * 0.06, -uTime * 0.02));
+      float band = smoothstep(0.62, 0.2, v.y) * smoothstep(-0.05, 0.2, v.y);
+      float fog = band * (smoothstep(0.35, 0.85, f1) * 0.75 + smoothstep(0.4, 0.9, f2) * 0.55) * uFx;
+      vec3 fogCol = vec3(0.2, 0.17, 0.34) + airLight * 0.7;
+      col = mix(col, fogCol, clamp(fog * 0.2, 0.0, 0.35));
+      col += airLight * (0.025 + fog * 0.16);
+
+      col += texture2D(uRays, v).rgb * vec3(0.95, 0.82, 1.1) * 0.32;
+      col += texture2D(uBloom, v).rgb * 0.6;
+
+      // grade: cool deep shadows, a little extra saturation, gentle S-curve
+      float l = dot(col, vec3(0.299, 0.587, 0.114));
+      col = mix(col, col * vec3(0.82, 0.84, 1.15), smoothstep(0.4, 0.0, l) * 0.6);
+      col = mix(vec3(l), col, 1.15);
+      vec3 sc = clamp(col, 0.0, 1.0);
+      col = mix(col, sc * sc * (3.0 - 2.0 * sc), 0.45);
+      col = mix(col, tonemap(col * 1.1), 0.35);
+
+      float vig = smoothstep(1.2, 0.3, length(c * vec2(1.15, 1.0)));
+      col *= mix(0.38, 1.0, vig);
+      float edge = smoothstep(0.35, 0.95, length(c * 2.0));
+      col = mix(col, vec3(0.42, 0.0, 0.04), clamp(edge * (uHurt * 0.9 + uLowHp * 0.45), 0.0, 0.85));
+      col += (hash(v * uRes * 1.7 + fract(uTime * 13.0) * 91.0) - 0.5) * 0.06 * uFx;
+      gl_FragColor = vec4(col, 1.0);
+    }`;
+
+  function shader(type, src) {
+    const sh = gl.createShader(type);
+    gl.shaderSource(sh, src);
+    gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) { console.warn(gl.getShaderInfoLog(sh)); return null; }
+    return sh;
+  }
+  function program(fs) {
+    const vs = shader(gl.VERTEX_SHADER, VS), f = shader(gl.FRAGMENT_SHADER, fs);
+    if (!vs || !f) return null;
+    const pr = gl.createProgram();
+    gl.attachShader(pr, vs);
+    gl.attachShader(pr, f);
+    gl.bindAttribLocation(pr, 0, 'p');
+    gl.linkProgram(pr);
+    if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) { console.warn(gl.getProgramInfoLog(pr)); return null; }
+    return { pr, loc: {} };
+  }
+  const progs = { pre: program(PRE), blur: program(BLUR), rays: program(RAYS), comp: program(COMP) };
+  if (Object.values(progs).some(x => !x)) return null;
+
+  const quad = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0);
+  gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+  function texture() {
+    const t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    return t;
+  }
+  function target(w, h) {
+    const t = texture();
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    const f = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
+    return { f, t, w, h };
+  }
+  const BW = W / 2, BH = H / 2;
+  const sceneT = texture(), glowT = texture();
+  const A = target(BW, BH), B = target(BW, BH), RT = target(BW, BH);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+
+  function run(pg, out, texs, uni) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, out ? out.f : null);
+    gl.viewport(0, 0, out ? out.w : canvas.width, out ? out.h : canvas.height);
+    gl.useProgram(pg.pr);
+    const loc = n => (n in pg.loc ? pg.loc[n] : (pg.loc[n] = gl.getUniformLocation(pg.pr, n)));
+    texs.forEach(([name, t], i) => {
+      gl.activeTexture(gl.TEXTURE0 + i);
+      gl.bindTexture(gl.TEXTURE_2D, t);
+      gl.uniform1i(loc(name), i);
+    });
+    for (const k in uni) {
+      const val = uni[k], l = loc(k);
+      if (typeof val === 'number') gl.uniform1f(l, val);
+      else if (val.length === 2) gl.uniform2fv(l, val);
+      else if (val.length === 3) gl.uniform3fv(l, val);
+      else gl.uniform4fv(l, val);
+    }
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+
+  return {
+    render(u) {
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, sceneT);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, SCENE);
+      gl.bindTexture(gl.TEXTURE_2D, glowT);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, GLOW);
+      run(progs.pre, A, [['uScene', sceneT], ['uGlow', glowT]], {});
+      const steps = u.fx > 0.5 ? [1, 2, 4] : [1.5, 3];
+      for (const k of steps) {
+        run(progs.blur, B, [['uTex', A.t]], { uDir: [k / BW, 0] });
+        run(progs.blur, A, [['uTex', B.t]], { uDir: [0, k / BH] });
+      }
+      run(progs.rays, RT, [['uScene', sceneT]], { uMoon: u.moon, uK: u.fx > 0.5 ? 1.0 : 0.6 });
+      run(progs.comp, null, [['uScene', sceneT], ['uBloom', A.t], ['uRays', RT.t]], {
+        uRes: [W, H], uMoon: u.moon, uTime: time % 1000, uCam: u.cam, uHurt: u.hurt, uLowHp: u.low, uFx: u.fx,
+        uLight: u.light, uFlash: u.flash, 'uLamps[0]': u.lamps
+      });
+    }
+  };
 }
 
 /* ---------- Frame ---------- */
+
+let POST = null;
+const ZA = { x: W / 2, y: 410 };
+
+function toUV(x, y) {
+  const z = zoom + zoomKick;
+  return [((x - ZA.x) * z + ZA.x) / W, 1 - ((y - ZA.y) * z + ZA.y) / H];
+}
+
+function postUniforms() {
+  const lantK = P.state === 'dead' ? Math.max(0, 1 - P.t / 3) : 1;
+  const lamps = new Float32Array(16);
+  const vis = deco.lamps
+    .map(l => ({ x: l.x + 24 - camX, d: Math.abs(l.x + 24 - camX - W / 2) }))
+    .sort((a, b) => a.d - b.d)
+    .slice(0, 4);
+  vis.forEach((l, i) => {
+    const [ux, uy] = toUV(l.x, GROUND - 120);
+    lamps.set([ux, uy, 0.75, 0], i * 4);
+  });
+  const fk = P.flash / 0.16;
+  return {
+    light: [...toUV(P.lx - camX, P.ly), lantK],
+    flash: P.flash > 0 ? [...toUV(P.muzzleX - camX + P.face * 30, P.muzzleY), fk * 1.4] : [0, 0, 0],
+    moon: toUV(MOON.x, MOON.y),
+    lamps,
+    cam: camX / W,
+    hurt: redFlash,
+    low: P.hp > 0 && P.hp < 30 && mode === 'play' ? 0.5 + Math.sin(time * 5) * 0.5 : 0,
+    fx: fxLow ? 0.35 : 1
+  };
+}
 
 function render() {
   gg.save();
@@ -3186,13 +3978,17 @@ function render() {
   gg.clearRect(0, 0, GLOW.width, GLOW.height);
   gg.restore();
 
-  ctx.save();
+  const z = zoom + zoomKick;
   const sh = shake > 0.3 ? [rand(-shake, shake) * 0.6, rand(-shake, shake) * 0.6] : [0, 0];
-  ctx.translate(sh[0], sh[1]);
-  gg.save();
-  gg.translate(sh[0], sh[1]);
+  for (const g of [ctx, gg]) {
+    g.save();
+    g.translate(sh[0] + ZA.x, sh[1] + ZA.y);
+    g.scale(z, z);
+    g.translate(-ZA.x, -ZA.y);
+  }
 
   drawSky();
+  drawBats();
   drawTiled(ctx, MOUNT, 0.03, 170);
   drawTiled(ctx, FAR, 0.08, 40);
   drawFogBand(FOG_PURPLE, 0.1, 250, 6, 0.9);
@@ -3238,48 +4034,54 @@ function render() {
 
   drawLighting(collectLights());
   // blood stays readable in the dark: a second, lighter pass of the stains and the flying gore
-  drawDecals(0.4);
+  drawDecals(POST ? 0.2 : 0.4);
   drawParticles(false, true);
   drawParticles(true);
   drawTiled(ctx, FORE, 1.35, H - 115);
   gg.restore();
   ctx.restore();
 
-  bloom();
-  grade();
-  ctx.drawImage(VIGNETTE, 0, 0, W, H);
-  drawScreenSplats();
-  if (redFlash > 0) {
-    ctx.fillStyle = `rgba(140,10,30,${redFlash * 0.35})`;
-    ctx.fillRect(0, 0, W, H);
+  if (POST) POST.render(postUniforms());
+  else {
+    bloom();
+    grade();
+    ctx.drawImage(VIGNETTE, 0, 0, W, H);
+    drawGrain();
   }
-  if (P.hp > 0 && P.hp < 30 && mode === 'play') {
-    const k = 0.5 + Math.sin(time * 5) * 0.5;
-    const vg = ctx.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, W * 0.6);
-    vg.addColorStop(0, 'rgba(120,0,20,0)');
-    vg.addColorStop(1, `rgba(120,0,20,${0.3 + k * 0.2})`);
-    ctx.fillStyle = vg;
-    ctx.fillRect(0, 0, W, H);
-  }
-  drawGrain();
 
-  // text glows are drawn into the glow buffer after the main bloom, so give them their own pass
-  gg.save();
-  gg.setTransform(1, 0, 0, 1, 0, 0);
-  gg.clearRect(0, 0, GLOW.width, GLOW.height);
-  gg.restore();
+  hud.clearRect(0, 0, W, H);
+  drawScreenSplats();
+  if (!POST) {
+    if (redFlash > 0) {
+      hud.fillStyle = `rgba(140,10,30,${redFlash * 0.35})`;
+      hud.fillRect(0, 0, W, H);
+    }
+    if (P.hp > 0 && P.hp < 30 && mode === 'play') {
+      const k = 0.5 + Math.sin(time * 5) * 0.5;
+      const vg = hud.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, W * 0.6);
+      vg.addColorStop(0, 'rgba(120,0,20,0)');
+      vg.addColorStop(1, `rgba(120,0,20,${0.3 + k * 0.2})`);
+      hud.fillStyle = vg;
+      hud.fillRect(0, 0, W, H);
+    }
+  }
   if (mode === 'title') drawTitle();
   else {
     drawHUD();
     if (mode === 'dead') drawDeath();
     if (mode === 'paused') {
-      ctx.fillStyle = 'rgba(4,2,10,0.55)';
-      ctx.fillRect(0, 0, W, H);
+      hud.fillStyle = 'rgba(4,2,10,0.55)';
+      hud.fillRect(0, 0, W, H);
       centreText('Paused', H * 0.45, 56, '#e6dcf2', 700, 4);
       centreText('Press P to return to the hunt', H * 0.45 + 42, 18, '#a99ec2', 500);
     }
   }
-  bloom();
+}
+
+POST = initPost(view);
+if (!POST) {
+  // no WebGL: show the 2D scene directly and finish it with the canvas effects
+  view.replaceWith(SCENE);
 }
 
 let last = performance.now();

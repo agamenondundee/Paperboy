@@ -23,16 +23,22 @@ body {
   aspect-ratio: 16 / 9;
 }
 
-canvas {
+#stage canvas {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
+}
+
+#game {
   cursor: crosshair;
 }
 
 #touch {
   display: none;
   position: absolute;
+  z-index: 2;
   inset: auto 0 0 0;
   padding: 10px 14px;
   justify-content: space-between;
@@ -49,7 +55,7 @@ canvas {
 #touch .actions {
   flex-wrap: wrap;
   justify-content: flex-end;
-  max-width: 260px;
+  max-width: 330px;
 }
 
 #touch button {

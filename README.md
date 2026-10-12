@@ -26,16 +26,24 @@ Add an entry to `js/houses.js`. The `style` field picks the façade drawing:
 ## Hollow Lantern (game)
 
 `game/index.html` is a small gothic action game: a lantern-bearing hunter
-with a long axe fights through waves of ghouls in a fog-drowned graveyard,
-with a root-covered boss every third wave. Open it in a browser; it needs
-no build step.
+fights through waves of ghouls in a fog-drowned graveyard, with a
+root-covered boss every third wave. Open it in a browser; it needs no build
+step.
 
-The scene uses bloom, per-character lantern lighting, god rays, colour
-grading and film grain, and drops the costliest effects automatically on
-slower devices. Blood sprays, pools and stays on the ground; heavy blows
-can behead ghouls.
+The scene is drawn on a 2D canvas and finished on the GPU with WebGL:
+volumetric fog lit by the lanterns, light shafts through the branches,
+bloom, heat shimmer, lens fringing, a filmic grade and grain. Without WebGL
+it falls back to canvas effects, and it drops the costliest effects
+automatically on slow devices. The hunter's cloak and scarf are simulated
+cloth. Blood sprays, pools and stays on the ground; heavy blows can behead
+ghouls.
 
-Controls: A/D move, W or Space jump, J or click to swing, K or right click
-for a heavy blow, Shift to roll, E to drink a vial, P to pause, M for sound
-and B to turn blood on or off.
+Three weapons: the Hunter's Axe (balanced), the Bone Scythe (long reach,
+its heavy attack spins and hits both sides) and the Blunderbuss (a spread
+shot, or a point-blank blast for its heavy, using ammo that refills over
+time). Ducking makes ghoul swipes pass overhead.
+
+Controls: A/D move, W or Space jump, S duck, J or click to attack, K or
+right click for a heavy attack, Shift to roll, E to drink a vial, Q or 1/2/3
+to change weapon, P to pause, M for sound and B to turn blood on or off.
 On phones and tablets on-screen buttons appear instead.
