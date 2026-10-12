@@ -913,7 +913,7 @@ function buildForeground() {
       g.fill();
     }
   }
-  return softened(c, 2);
+  return c;
 }
 
 function buildVignette() {
@@ -1014,6 +1014,46 @@ const FORE_SKULLS = (() => {
     g.beginPath();
     g.ellipse(cx, h, 210, 26, 0, 0, TAU);
     g.fill();
+  }
+  return c;
+})();
+const PILLAR = (() => {
+  // a massive stone column right by the lens
+  const w = 130, h = H;
+  const [c, g] = mk(w, h);
+  const r = rng(515);
+  const pg = g.createLinearGradient(0, 0, w, 0);
+  pg.addColorStop(0, '#0a0610');
+  pg.addColorStop(0.7, '#1a1228');
+  pg.addColorStop(1, '#0c0814');
+  g.fillStyle = pg;
+  g.fillRect(14, 0, w - 28, h);
+  g.fillRect(0, h - 70, w, 70);
+  g.fillRect(4, 0, w - 8, 40);
+  for (let y = 46; y < h - 70; y += 26) {
+    g.fillStyle = 'rgba(0,0,0,0.5)';
+    g.fillRect(14, y, w - 28, 2);
+    g.fillStyle = 'rgba(160,130,220,0.08)';
+    g.fillRect(14, y + 2, w - 28, 1);
+  }
+  g.fillStyle = 'rgba(255,150,80,0.35)';
+  g.fillRect(w - 16, 0, 2, h);
+  g.fillStyle = 'rgba(190,160,255,0.25)';
+  g.fillRect(14, 0, 2, h);
+  g.strokeStyle = '#141019';
+  g.lineWidth = 3;
+  g.beginPath();
+  g.moveTo(w * 0.7, 40);
+  for (let i = 0; i < 14; i++) g.lineTo(w * 0.7 + Math.sin(i * 0.8) * 3, 40 + i * 14);
+  g.stroke();
+  g.strokeStyle = 'rgba(40,100,55,0.85)';
+  for (let i = 0; i < 10; i++) {
+    const x = 20 + r() * (w - 40), l = 40 + r() * 140;
+    g.lineWidth = 1.5;
+    g.beginPath();
+    g.moveTo(x, 40);
+    g.quadraticCurveTo(x + (r() - 0.5) * 20, 40 + l / 2, x + (r() - 0.5) * 10, 40 + l);
+    g.stroke();
   }
   return c;
 })();
@@ -1306,7 +1346,7 @@ let banner = { text: '', sub: '', t: 99 }, swingCounter = 0, deadT = 0, playT = 
 let enemies = [], particles = [], spikes = [], shocks = [], pickups = [];
 let decals = [], fountains = [], screenSplats = [];
 let gore = true, best = 0, fxLow = false, slowT = 0, credits = 3, waveTotal = 1;
-let zoom = 1.12, zoomKick = 0, bats = [], batT = 3, bolts = [];
+let zoom = 1.12, zoomKick = 0, bats = [], batT = 3, bolts = [], tracers = [];
 try {
   best = +localStorage.getItem('hollow-lantern-best') || 0;
   gore = localStorage.getItem('hollow-lantern-gore') !== 'off';
@@ -1503,6 +1543,10 @@ function bleed(x, y, dir, amount, heavy) {
   if (heavy) burst(x, y, 4, 'chunk', dir);
 }
 
+function impactFlash(x, y, big, rgb) {
+  particles.push({ x, y, vx: 0, vy: 0, life: 0, max: big ? 0.2 : 0.13, size: big ? 46 : 28, col: rgb, g: 0, add: true, drag: 1, type: 'impact', seed: 0, rot: rand(0, TAU) });
+}
+
 function ambient(dt) {
   if (Math.random() < dt * 3) {
     particles.push({
@@ -1663,8 +1707,9 @@ function drawCloth(g) {
   const fx = P.x, fy = P.y + 6;
   const S = cloth.strands;
   const cg = g.createLinearGradient(0, -80, 0, 0);
-  cg.addColorStop(0, '#2b2539');
-  cg.addColorStop(1, '#08060d');
+  cg.addColorStop(0, '#7a1626');
+  cg.addColorStop(0.55, '#4a0c18');
+  cg.addColorStop(1, '#16040a');
   g.fillStyle = cg;
   g.beginPath();
   const first = S[0].nodes, last = S[S.length - 1].nodes;
@@ -1689,10 +1734,19 @@ function drawCloth(g) {
     S[k].nodes.forEach((q, i) => (i ? g.lineTo(q.x - fx, q.y - fy) : g.moveTo(q.x - fx, q.y - fy)));
     g.stroke();
   }
-  g.strokeStyle = 'rgba(165,180,250,0.55)';
-  g.lineWidth = 1;
+  g.strokeStyle = 'rgba(255,140,150,0.5)';
+  g.lineWidth = 1.2;
   g.beginPath();
   first.forEach((q, i) => (i ? g.lineTo(q.x - fx, q.y - fy) : g.moveTo(q.x - fx, q.y - fy)));
+  g.stroke();
+  // ragged hem highlight
+  g.strokeStyle = 'rgba(255,170,150,0.35)';
+  g.lineWidth = 0.8;
+  g.beginPath();
+  S.forEach((c, k) => {
+    const q = c.nodes[c.nodes.length - 1];
+    k ? g.lineTo(q.x - fx, q.y - fy) : g.moveTo(q.x - fx, q.y - fy);
+  });
   g.stroke();
   // scarf ribbon
   const sc = cloth.scarf.nodes;
@@ -1758,6 +1812,7 @@ function damageEnemy(e, dmg, kb, heavy) {
     e.wounds++;
   }
   burst(e.x, hy, 8, 'spark', dir);
+  impactFlash(e.x - dir * 8, hy + rand(-10, 10), heavy, heavy ? '255,230,200' : '220,240,255');
   if (weapon().id !== 'gun') P.blood = Math.min(1, P.blood + (heavy ? 0.45 : 0.22));
   if (heavy) zoomKick = Math.max(zoomKick, 0.025);
   sfx.hit();
@@ -1959,10 +2014,14 @@ function fireGun(spec, heavy) {
       size: rand(5, 11), col: 'rgba(150,140,170,0.35)', g: -10, add: false, drag: 0.94, type: 'dust', seed: 0
     });
   }
+  let reachX = mx + dir * spec.range;
   const targets = enemies
     .filter(e => hittable(e) && (e.x - P.x) * dir > -10 && Math.abs(e.x - P.x) < spec.range + (e.type === 'bloom' ? 60 : 0) && Math.abs(centerY(e) - (P.y - 60)) < 150)
     .sort((a, b) => Math.abs(a.x - P.x) - Math.abs(b.x - P.x))
     .slice(0, spec.spread);
+  if (targets.length) reachX = targets[targets.length - 1].x;
+  tracers.push({ x1: mx, y1: my, x2: reachX, y2: my + rand(-6, 6), t: 0, heavy });
+  impactFlash(reachX, my, heavy, '180,230,255');
   for (const e of targets) {
     const d = Math.abs(e.x - P.x);
     const fall = clamp(1.25 - d / spec.range, 0.45, 1.2);
@@ -2000,8 +2059,6 @@ function updatePlayer(dt) {
   p.swapT += dt;
   p.ammoT += dt;
   if (p.ammo < AMMO_MAX && p.ammoT > 2.2) { p.ammo++; p.ammoT = 0; }
-  if (pressed.swap) p.nextWeapon = ((p.nextWeapon == null ? p.weapon : p.nextWeapon) + 1) % WEAPONS.length;
-  for (let i = 0; i < 3; i++) if (pressed['w' + (i + 1)]) p.nextWeapon = i;
   if (p.nextWeapon != null && (p.state === 'idle' || p.state === 'run' || p.state === 'crouch')) {
     swapWeapon(p.nextWeapon);
     p.nextWeapon = null;
@@ -2593,6 +2650,9 @@ function update(dt) {
   if (P.state !== 'dead') {
     for (const a of ['attack', 'heavy', 'dodge', 'heal', 'jump']) if (pressed[a]) { P.buf = a; P.bufT = 0.25; }
   }
+  // weapon choice is buffered too, so a press during hit-stop is never lost
+  if (pressed.swap) P.nextWeapon = ((P.nextWeapon == null ? P.weapon : P.nextWeapon) + 1) % WEAPONS.length;
+  for (let i = 0; i < 3; i++) if (pressed['w' + (i + 1)]) P.nextWeapon = i;
   if (hitStop > 0) { hitStop -= dt; return; }
 
   playT += dt;
@@ -2604,6 +2664,8 @@ function update(dt) {
   zoomKick *= Math.pow(0.002, dt);
   for (const e of enemies) updateFoe(e, dt);
   updateBolts(dt);
+  for (const t of tracers) t.t += dt;
+  tracers = tracers.filter(t => t.t < 0.22);
   if (banner.t > 3.2) threat.t += dt;
   const gs = enemies.filter(e => !e.dead && (e.type === 'ghoul' || e.type === 'hound' || e.type === 'butcher') && e.state !== 'leap');
   for (let i = 0; i < gs.length; i++) {
@@ -2677,6 +2739,27 @@ function drawGround() {
   sheen.addColorStop(1, 'rgba(120,135,215,0)');
   ctx.fillStyle = sheen;
   ctx.fillRect(0, GROUND - 6, W, 46);
+  // polished flagstones mirror the fire and the lantern
+  const refl = (x, rgb, wdt, a) => {
+    for (const g of [ctx, gg]) {
+      g.save();
+      g.globalCompositeOperation = 'lighter';
+      const rg = g.createRadialGradient(x, GROUND + 6, 0, x, GROUND + 6, wdt);
+      rg.addColorStop(0, `rgba(${rgb},${a})`);
+      rg.addColorStop(1, `rgba(${rgb},0)`);
+      g.fillStyle = rg;
+      g.beginPath();
+      g.ellipse(x, GROUND + 6, wdt, 7, 0, 0, TAU);
+      g.fill();
+      g.restore();
+    }
+  };
+  const fl = 0.85 + Math.sin(time * 11) * 0.15;
+  for (const l of deco.lamps) {
+    const x = l.x - camX;
+    if (x > -100 && x < W + 100) refl(x, '255,140,60', 46, 0.45 * fl);
+  }
+  if (mode !== 'title' || true) refl(P.lx - camX, '110,190,255', 40, P.state === 'dead' ? 0.1 : 0.4);
 }
 
 function drawPuddles() {
@@ -2967,6 +3050,23 @@ function rimPass(buf, g, rbuf, dx, dy, colour, alpha) {
   g.restore();
 }
 
+// a dark one-pixel-ish outline behind the sprite, like hand-drawn pixel art
+function outlinePass(buf, g, rbuf, colour, w) {
+  const r = rbuf.g;
+  r.globalCompositeOperation = 'source-over';
+  r.globalAlpha = 1;
+  r.clearRect(0, 0, rbuf.width, rbuf.height);
+  r.drawImage(buf, 0, 0);
+  r.globalCompositeOperation = 'source-in';
+  r.fillStyle = colour;
+  r.fillRect(0, 0, rbuf.width, rbuf.height);
+  g.save();
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.globalCompositeOperation = 'destination-over';
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [0.7, 0.7], [-0.7, 0.7], [0.7, -0.7], [-0.7, -0.7]]) g.drawImage(rbuf, dx * w * R, dy * w * R);
+  g.restore();
+}
+
 function renderActor(buf, g, ox, oy, wx, footY, drawFn, opts = {}) {
   const sx = wx - camX;
   if (sx < -buf.w || sx > W + buf.w) return;
@@ -3019,6 +3119,7 @@ function renderActor(buf, g, ox, oy, wx, footY, drawFn, opts = {}) {
       g.fillRect(0, 0, buf.w, buf.h);
       g.restore();
     }
+    if (!fxLow) outlinePass(buf, g, rb, '#05020a', 1.5);
   }
   ctx.globalAlpha = opts.alpha == null ? 1 : opts.alpha;
   ctx.drawImage(buf, sx - ox, footY - oy, buf.w, buf.h);
@@ -3894,7 +3995,7 @@ function drawPlayerBody(g, p, ghost) {
   const h2 = [pv[0] + Math.cos(a) * grip, pv[1] + Math.sin(a) * grip];
   const L = w.light, Hv = w.heavy;
   const swinging = w.id !== 'gun' && ((st === 'attack' && t > L.from - 0.01 && t < L.to + 0.01) || (st === 'heavy' && t > Hv.from - 0.02 && t < Hv.to));
-  if (swinging && !ghost) {
+  if (swinging && !ghost && p.trailPass) {
     const outer = w.id === 'scythe' ? 172 : 180, inner = w.id === 'scythe' ? 110 : 125, arc = st === 'heavy' && w.id === 'scythe' ? 2.4 : 0.9;
     g.save();
     g.globalCompositeOperation = 'lighter';
@@ -4154,7 +4255,7 @@ function drawGhoul(e) {
   }
   const fogK = clamp((e.lane + 3) / 17, 0, 1);
   renderActor(ABUF, ab, 170, 290, e.x, footY + yOff, g => drawGhoulBody(g, e), {
-    flash: e.flash > 0 ? 0.75 : 0,
+    flash: e.flash > 0 ? 0.3 : 0,
     alpha: Math.max(0, e.alpha) * (0.88 + fogK * 0.12)
   });
   if (!e.dead && !e.headless && e.eye && e.state !== 'rise') {
@@ -4305,6 +4406,40 @@ function drawBloom(b) {
   }
 }
 
+// the swing trail is drawn on its own so the sprite outline never wraps it
+function drawSwingTrail(g, p) {
+  const w = WEAPONS[p.weapon], st = p.state, t = p.t;
+  if (w.id === 'gun') return;
+  const L = w.light, Hv = w.heavy;
+  const swinging = (st === 'attack' && t > L.from - 0.01 && t < L.to + 0.01) || (st === 'heavy' && t > Hv.from - 0.02 && t < Hv.to);
+  if (!swinging) return;
+  const pose = playerPose(p);
+  g.scale(p.face, 1);
+  g.rotate(pose.tilt);
+  g.translate(0, pose.crouch);
+  const a = weaponAngle(p);
+  const pv = [4 + Math.cos(a) * 18, -64 + pose.bob + Math.sin(a) * 18];
+  const outer = w.id === 'scythe' ? 172 : 180, inner = w.id === 'scythe' ? 110 : 125, arc = st === 'heavy' && w.id === 'scythe' ? 2.4 : 0.9;
+  g.globalCompositeOperation = 'lighter';
+  const grd = g.createRadialGradient(pv[0], pv[1], inner * 0.7, pv[0], pv[1], outer);
+  grd.addColorStop(0, 'rgba(140,170,255,0)');
+  grd.addColorStop(0.75, 'rgba(170,195,255,0.1)');
+  grd.addColorStop(1, 'rgba(230,240,255,0.45)');
+  g.fillStyle = grd;
+  g.beginPath();
+  g.arc(pv[0], pv[1], outer, a - arc, a);
+  g.arc(pv[0], pv[1], inner, a, a - arc, true);
+  g.fill();
+  if (p.blood > 0.3 && gore) {
+    g.globalCompositeOperation = 'source-over';
+    g.strokeStyle = 'rgba(170,12,30,0.6)';
+    g.lineWidth = 3;
+    g.beginPath();
+    g.arc(pv[0], pv[1], outer - 15, a - arc, a);
+    g.stroke();
+  }
+}
+
 function drawPlayer() {
   const footY = P.y + 6;
   drawShadow(P.x, GROUND + 6, 30, P.onGround ? 0.55 : 0.3);
@@ -4314,6 +4449,7 @@ function drawPlayer() {
   }
   P.ghostPass = false;
   renderActor(ABUF, ab, 170, 290, P.x, footY, g => { drawCloth(g); drawPlayerBody(g, P, false); }, { flash: P.inv > 0.45 ? 0.4 : 0, player: true });
+  renderActor(ABUF, ab, 170, 290, P.x, footY, g => drawSwingTrail(g, P), { light: false });
 }
 
 function drawSpikes() {
@@ -4430,6 +4566,35 @@ function drawParticles(additive, goreOnly = false) {
         g.lineTo(p.size * 0.8, -p.size * 0.8);
         g.lineTo(p.size, p.size * 0.5);
         g.lineTo(-p.size * 0.4, p.size * 0.9);
+        g.fill();
+        g.restore();
+        continue;
+      }
+      if (p.type === 'impact') {
+        const k2 = p.life / p.max, sz = p.size * (0.5 + k2 * 0.8);
+        g.globalAlpha = 1 - k2;
+        g.save();
+        g.translate(sx, p.y);
+        g.rotate(p.rot);
+        g.fillStyle = `rgba(${p.col},1)`;
+        for (const [a2, l] of [[0, 1], [Math.PI / 2, 0.7], [Math.PI / 4, 0.4], [-Math.PI / 4, 0.4]]) {
+          g.save();
+          g.rotate(a2);
+          g.beginPath();
+          g.moveTo(-sz * l, 0);
+          g.lineTo(0, -sz * 0.07);
+          g.lineTo(sz * l, 0);
+          g.lineTo(0, sz * 0.07);
+          g.closePath();
+          g.fill();
+          g.restore();
+        }
+        const cg2 = g.createRadialGradient(0, 0, 0, 0, 0, sz * 0.35);
+        cg2.addColorStop(0, 'rgba(255,255,255,1)');
+        cg2.addColorStop(1, `rgba(${p.col},0)`);
+        g.fillStyle = cg2;
+        g.beginPath();
+        g.arc(0, 0, sz * 0.35, 0, TAU);
         g.fill();
         g.restore();
         continue;
@@ -5225,7 +5390,7 @@ function drawFoe(e) {
   const sx = e.x - camX;
   if (sx < -200 || sx > W + 200) return;
   const fogK = clamp((e.lane + 3) / 17, 0, 1);
-  const opts = { flash: e.flash > 0 ? 0.75 : 0, alpha: Math.max(0, e.alpha) * (0.9 + fogK * 0.1) };
+  const opts = { flash: e.flash > 0 ? 0.3 : 0, alpha: Math.max(0, e.alpha) * (0.9 + fogK * 0.1) };
   if (e.type === 'hound') {
     drawShadow(e.x, GROUND + e.lane, 34 * e.scale, e.y < GROUND - 10 ? 0.25 : 0.5);
     renderActor(ABUF, ab, 170, 290, e.x, e.y + e.lane, g => drawHoundBody(g, e), opts);
@@ -5285,6 +5450,35 @@ function drawFoe(e) {
       gg.beginPath();
       gg.arc(sx + e.eyes[0] * e.face, GROUND + e.lane + e.eyes[1], 3, 0, TAU);
       gg.fill();
+    }
+  }
+}
+
+function drawTracers() {
+  for (const t of tracers) {
+    const k = 1 - t.t / 0.22;
+    for (const g of [ctx, gg]) {
+      g.save();
+      g.globalCompositeOperation = 'lighter';
+      g.lineCap = 'round';
+      for (const [wdt, col] of [[t.heavy ? 18 : 11, `rgba(60,140,255,${0.35 * k})`], [t.heavy ? 8 : 5, `rgba(120,210,255,${0.8 * k})`], [t.heavy ? 3 : 2, `rgba(240,250,255,${k})`]]) {
+        g.strokeStyle = col;
+        g.lineWidth = wdt;
+        g.beginPath();
+        g.moveTo(t.x1 - camX, t.y1);
+        g.lineTo(t.x2 - camX, t.y2);
+        g.stroke();
+      }
+      // crackling sparks along the beam
+      g.strokeStyle = `rgba(170,230,255,${0.7 * k})`;
+      g.lineWidth = 1;
+      g.beginPath();
+      for (let i = 0; i <= 12; i++) {
+        const x = lerp(t.x1, t.x2, i / 12) - camX, y = lerp(t.y1, t.y2, i / 12) + (Math.random() - 0.5) * 10;
+        i ? g.lineTo(x, y) : g.moveTo(x, y);
+      }
+      g.stroke();
+      g.restore();
     }
   }
 }
@@ -5877,15 +6071,15 @@ function initPost(canvas) {
     vec3 tonemap(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
     void main() {
       vec2 asp = vec2(uRes.x / uRes.y, 1.0);
-      // snap to a 640x360 grid for a crisp pixel-art finish
+      // snap to the 960x540 art grid so edges stay crisp
       vec2 uv = (floor(v * uPix) + 0.5) / uPix;
       vec2 ld = (v - uLight.xy) * asp;
       float lr = length(ld);
       // heat shimmer above the lantern flame
       float sh = smoothstep(0.14, 0.0, lr) * uLight.z * uFx;
-      uv += vec2(noise(v * 60.0 + vec2(0.0, -uTime * 4.0)) - 0.5, noise(v * 60.0 + vec2(5.0, -uTime * 5.0)) - 0.5) * 0.004 * sh;
+      uv += vec2(0.0) * sh;
       vec2 c = uv - 0.5;
-      float ca = (0.0012 + uHurt * 0.01) * dot(c, c) * 4.0;
+      float ca = uHurt * 0.01 * dot(c, c) * 4.0;
       vec3 col;
       col.r = texture2D(uScene, uv - c * ca).r;
       col.g = texture2D(uScene, uv).g;
@@ -5909,11 +6103,11 @@ function initPost(canvas) {
       float band = smoothstep(0.62, 0.2, v.y) * smoothstep(-0.05, 0.2, v.y);
       float fog = band * (smoothstep(0.35, 0.85, f1) * 0.75 + smoothstep(0.4, 0.9, f2) * 0.55) * uFx * (1.0 + lan * 0.9);
       vec3 fogCol = vec3(0.14, 0.11, 0.26) + airLight * 0.6;
-      col = mix(col, fogCol, clamp(fog * 0.16, 0.0, 0.3));
-      col += airLight * (0.008 + fog * 0.18);
+      col = mix(col, fogCol, clamp(fog * 0.09, 0.0, 0.18));
+      col += airLight * (0.004 + fog * 0.1);
 
-      col += texture2D(uRays, v).rgb * vec3(0.95, 0.82, 1.1) * 0.32;
-      col += texture2D(uBloom, v).rgb * 0.6;
+      col += texture2D(uRays, v).rgb * vec3(0.95, 0.82, 1.1) * 0.18;
+      col += texture2D(uBloom, v).rgb * 0.42;
 
       // the world away from the lantern leans magenta; its pool of light is cold cyan
       float nearLamp = clamp(exp(-lr * lr * 5.0) * uLight.z, 0.0, 1.0);
@@ -5927,13 +6121,13 @@ function initPost(canvas) {
       col = mix(col, sc * sc * (3.0 - 2.0 * sc), 0.45);
       col = mix(col, tonemap(col * 1.1), 0.25);
       // gentle posterisation, like a limited palette
-      col = mix(col, floor(col * 24.0 + 0.5) / 24.0, 0.6);
+      col = mix(col, floor(col * 32.0 + 0.5) / 32.0, 0.2);
 
       float vig = smoothstep(1.15, 0.25, length(c * vec2(1.15, 1.0)));
-      col *= mix(0.3, 1.0, vig);
+      col *= mix(0.5, 1.0, vig);
       float edge = smoothstep(0.35, 0.95, length(c * 2.0));
       col = mix(col, vec3(0.42, 0.0, 0.04), clamp(edge * (uHurt * 0.9 + uLowHp * 0.45), 0.0, 0.85));
-      col += (hash(uv * uRes * 1.7 + fract(uTime * 13.0) * 91.0) - 0.5) * 0.025 * uFx;
+      col += (hash(uv * uRes * 1.7 + fract(uTime * 13.0) * 91.0) - 0.5) * 0.008 * uFx;
       gl_FragColor = vec4(col, 1.0);
     }`;
 
@@ -6024,7 +6218,7 @@ function initPost(canvas) {
       run(progs.rays, RT, [['uScene', sceneT]], { uMoon: u.moon, uK: u.fx > 0.5 ? 1.0 : 0.6 });
       run(progs.comp, null, [['uScene', sceneT], ['uBloom', A.t], ['uRays', RT.t]], {
         uRes: [W, H], uMoon: u.moon, uTime: time % 1000, uCam: u.cam, uHurt: u.hurt, uLowHp: u.low, uFx: u.fx,
-        uLight: u.light, uFlash: u.flash, 'uLamps[0]': u.lamps, uPix: [640, 360]
+        uLight: u.light, uFlash: u.flash, 'uLamps[0]': u.lamps, uPix: [W, H]
       });
     }
   };
@@ -6084,14 +6278,14 @@ function render() {
   drawTiled(ctx, MOUNT, 0.03, 150);
   drawTiled(ctx, FAR, 0.08, 30);
   drawTiled(gg, FAR_GLOW, 0.08, 30);
-  drawFogBand(FOG_PURPLE, 0.1, 270, 6, 0.6);
+  drawFogBand(FOG_PURPLE, 0.1, 270, 6, 0.35);
   drawTiled(ctx, BACK, 0.2, 130);
   drawTiled(gg, BACK_GLOW, 0.2, 130);
   drawWaterfalls(130);
-  drawFogBand(FOG_PURPLE, 0.25, 320, 10, 0.45);
+  drawFogBand(FOG_PURPLE, 0.25, 320, 10, 0.25);
   drawTiled(ctx, MID, 0.55, -90);
   drawTiled(gg, MID_GLOW, 0.55, -90);
-  drawFogBand(FOG_BLUE, 0.5, 340, 14, 0.35);
+  drawFogBand(FOG_BLUE, 0.5, 340, 14, 0.18);
 
   drawGround();
   drawDecals();
@@ -6103,11 +6297,12 @@ function render() {
   }
   drawCandles();
   drawGrass(false);
-  drawFogBand(FOG_BLUE, 0.9, GROUND - 110, 20, 0.22);
+  drawFogBand(FOG_BLUE, 0.9, GROUND - 110, 20, 0.1);
 
   drawSpikes();
   drawPickups();
   drawBolts();
+  drawTracers();
   const actors = enemies.slice();
   if (mode !== 'title') actors.push({ type: 'player', lane: 6 });
   actors.sort((a, b) => a.lane - b.lane);
@@ -6118,7 +6313,7 @@ function render() {
   if (mode === 'title') drawPlayer();
   drawParticles(false);
   drawGrass(true);
-  drawFogBand(FOG_PURPLE, 1.1, GROUND - 60, 26, 0.22);
+  drawFogBand(FOG_PURPLE, 1.1, GROUND - 60, 26, 0.08);
 
   drawLighting(collectLights());
   // blood stays readable in the dark: a second, lighter pass of the stains and the flying gore
@@ -6131,6 +6326,14 @@ function render() {
   if (shake > 0.3) ctx.translate(sh[0] * 1.3, sh[1] * 1.3);
   drawTiled(ctx, FORE, 1.6, H - 92);
   drawTiled(ctx, FORE_SKULLS, 1.75, H - 120);
+  for (const px of [700, 2500, 4300, 6100]) {
+    const x = px - camX * 1.6;
+    if (x > -PILLAR.w && x < W + 20) {
+      ctx.globalAlpha = clamp(Math.abs(x + PILLAR.w / 2 - W / 2) / 260, 0.18, 1);
+      ctx.drawImage(PILLAR, x, 0, PILLAR.w, PILLAR.h);
+      ctx.globalAlpha = 1;
+    }
+  }
   ctx.restore();
 
   if (POST) POST.render(postUniforms());
