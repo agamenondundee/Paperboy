@@ -244,7 +244,7 @@ export function buildHalls(ctx: Ctx): Lockers {
 
   // ------------------------------------------------------------ lights
   const L = ctx.lights;
-  const trof = (x: number, z: number, alongX: boolean) => L.addIndoor("troffer", x, 3.2, z, alongX ? Math.PI / 2 : 0, "H", { intensity: 9, range: 9, lightY: 2.85 });
+  const trof = (x: number, z: number, alongX: boolean) => L.addIndoor("troffer", x, 3.2, z, alongX ? Math.PI / 2 : 0, "H", { intensity: 10, range: 9, lightY: 2.85 });
   for (let x = 6; x <= 108; x += 6) trof(x, 16.5, true);
   for (const x of [37.5, 64.5, 97.5]) for (const z of [21.5, 27.5, 33.5]) trof(x, z, false);
   for (let x = 43.5; x <= 109; x += 6) trof(x, 37.5, true);

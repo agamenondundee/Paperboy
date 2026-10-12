@@ -276,6 +276,8 @@ export class GhostSystem implements GhostSystemApi {
     gi.fadeIn = 1 / 1.1;
     gi.scareT = 0;
     gi.model.scare = 0;
+    gi.model.gaze = 0;
+    gi.lift = 0;
     gi.exposure = 0;
     gi.suspicion = 0;
     gi.locker = null;
@@ -307,6 +309,7 @@ export class GhostSystem implements GhostSystemApi {
       if (g.state === "gone") continue;
       this.think(g, dt, w);
       this.syncModel(g);
+      if (g.kind === "queen") this.hum(g, dt, w);
     }
     this.claimLocker(w);
     this.separate();
@@ -359,7 +362,7 @@ export class GhostSystem implements GhostSystemApi {
       this.halt(g, dt);
       g.faceYaw = g.lookBase + Math.sin(g.stateT * 0.25) * 0.6;
       this.turn(g, dt, 2);
-      this.ambient(g, dt, w, dist);
+      this.ambient(g, dt, dist);
       return;
     }
 
@@ -557,7 +560,7 @@ export class GhostSystem implements GhostSystemApi {
       const st = g.state as GhostState;
       if (g.scareT <= 0 && st !== "banishing" && st !== "repelled" && st !== "gone") this.repel(g);
     }
-    this.ambient(g, dt, w, dist);
+    this.ambient(g, dt, dist);
   }
 
   /** Move towards a target with smooth speed; returns true on arrival. */
@@ -800,6 +803,7 @@ export class GhostSystem implements GhostSystemApi {
     gi.speed = 0;
     gi.model.scare = gentle ? 0.65 : 1;
     gi.model.frozen = false;
+    gi.frozen = false;
     if (gi.state === "banishing" || gi.state === "repelled") this.enter(gi, "chase");
     this.placeScare(gi, camera, 0);
     return dur;
@@ -810,17 +814,22 @@ export class GhostSystem implements GhostSystemApi {
     const cx = e[12],
       cy = e[13],
       cz = e[14];
-    let fx = -e[8],
+    // Straight down the view axis, so it fills the frame wherever the player looks.
+    const fx = -e[8],
+      fy = -e[9],
       fz = -e[10];
-    const l = Math.hypot(fx, fz) || 1;
-    fx /= l;
-    fz /= l;
+    const fl = Math.hypot(fx, fy, fz) || 1;
     const d = lerp(0.8, 0.55, smoothstep(0, 0.25, k)) - (g.scareGentle ? 0 : Math.sin(k * 40) * 0.015);
-    g.x = g.px = cx + fx * d;
-    g.z = g.pz = cz + fz * d;
-    g.yaw = g.pyaw = g.faceYaw = Math.atan2(cx - g.x, cz - g.z);
+    const hx = cx + (fx / fl) * d,
+      hy = cy + clamp(fy / fl, -0.6, 0.6) * d * 0.6,
+      hz = cz + (fz / fl) * d;
+    // Tilt the head to meet the eye, with a nervous jitter.
+    g.model.gaze = Math.atan2(cy - hy, d) + (g.scareGentle ? 0 : Math.sin(k * 57) * 0.04);
+    g.x = g.px = hx;
+    g.z = g.pz = hz;
+    g.yaw = g.pyaw = g.faceYaw = Math.atan2(cx - hx, cz - hz);
     const r = g.root;
-    r.position.set(g.x, cy - (g.model.headY - 0.03), g.z);
+    r.position.set(hx, hy - (g.model.headY - 0.02), hz);
     r.rotation.y = g.yaw;
   }
 
@@ -860,6 +869,7 @@ export class GhostSystem implements GhostSystemApi {
         if (g.scareT <= 0) {
           const e = (g.scareCam ?? camera).matrixWorld.elements;
           g.model.scare = 0;
+          g.model.gaze = 0;
           g.scareCam = null;
           this.scatter(g, e[12], e[14], REPEL_DIST);
         }
@@ -897,23 +907,23 @@ export class GhostSystem implements GhostSystemApi {
     return _snd;
   }
 
-  private ambient(g: GhostImpl, dt: number, w: GhostWorld, dist: number) {
+  /** Jenny's lullaby, louder as she nears and silent while she is dissolved. */
+  private hum(g: GhostImpl, dt: number, w: GhostWorld) {
+    g.emitT -= dt;
+    if (g.emitT > 0) return;
+    g.emitT = 0.1;
+    const em = this.emitters.get(g.model);
+    if (!em) return;
+    const dist = Math.hypot(w.player.x - g.x, w.player.z - g.z);
+    const base = w.phase === "intro" ? 0.45 : 0.85;
+    const level = base * (1 - g.dissolve) * (0.5 + 0.5 * (1 - smoothstep(2, 18, dist)));
+    em.update(this.at(g, g.model.headY), level);
+  }
+
+  private ambient(g: GhostImpl, dt: number, dist: number) {
     const near = dist < 32 && g.dissolve < 0.95;
     const moving = g.speed > 0.25 && !g.frozen;
     switch (g.kind) {
-      case "queen": {
-        g.emitT -= dt;
-        if (g.emitT <= 0) {
-          g.emitT = 0.1;
-          const em = this.emitters.get(g.model);
-          if (em) {
-            const base = w.phase === "intro" ? 0.45 : 0.85;
-            const level = base * (1 - g.dissolve) * (0.5 + 0.5 * (1 - smoothstep(2, 18, dist)));
-            em.update(this.at(g, g.model.headY), level);
-          }
-        }
-        break;
-      }
       case "janitor":
         if (moving && near) {
           g.sndT -= dt;

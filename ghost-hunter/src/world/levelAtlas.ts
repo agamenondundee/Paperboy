@@ -99,9 +99,9 @@ function chalk(g: CanvasRenderingContext2D, w: number, h: number, r: Rng, draw: 
     tg.lineJoin = "round";
     draw(tg);
     tg.globalCompositeOperation = "destination-out";
-    for (let i = 0; i < w * h * 0.05; i++) {
+    for (let i = 0; i < w * h * 0.025; i++) {
       tg.fillStyle = `rgba(0,0,0,${0.3 + r() * 0.7})`;
-      tg.fillRect(r() * w, r() * h, 1 + r() * 1.5, 1 + r() * 1.5);
+      tg.fillRect(r() * w, r() * h, 1 + r() * 2, 1 + r() * 2);
     }
   });
   g.drawImage(t, 0, 0);

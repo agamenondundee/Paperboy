@@ -554,6 +554,8 @@ export class GhostModel {
   scare = 0;
   reach = 0;
   writhe = 0;
+  /** Extra head pitch in radians, positive looks up (to meet the camera in a scare). */
+  gaze = 0;
 
   private body = new THREE.Group();
   private mixer: THREE.AnimationMixer | null = null;
@@ -783,7 +785,7 @@ export class GhostModel {
       const hm = head();
       const capMat = this.mat(ghostMaterial(u, "solid", { color: 0x2b3542, opacity: 0.93, rim: 0.9, roughness: 0.85 }));
       hm.add(new THREE.Mesh(kit.geo("cap", buildCap), capMat));
-      const brass = this.mat(ghostMaterial(u, "solid", { color: 0xc9a14a, opacity: 0.96, rim: 0.55, roughness: 0.32, metalness: 0.9 }));
+      const brass = this.mat(ghostMaterial(u, "solid", { color: 0xc9a14a, opacity: 0.96, rim: 0.55, roughness: 0.32, metalness: 0.9, emissive: 0x3a2a08 }));
       const badge = new THREE.Mesh(kit.geo("badge", () => new THREE.BoxGeometry(0.026, 0.016, 0.004)), brass);
       badge.position.set(0, 0.062, 0.12);
       badge.rotation.x = -0.35;
@@ -856,8 +858,8 @@ export class GhostModel {
         run: moving * runK * calm,
         sneak: (this.kind === "janitor" ? 0.35 + 0.65 * this.sneak : this.kind === "hollow" ? 0.45 : 0) * calm,
         sad: (this.kind === "queen" ? 0.42 : 0) * calm,
-        agree: scare * 0.7,
-        shake: Math.max(scare, this.writhe * 0.7),
+        agree: scare * 0.25,
+        shake: Math.max(scare * 0.45, this.writhe * 0.7),
       };
       const k = damp(scare > 0 ? 18 : 6, dt);
       for (const key of WEIGHT_KEYS) {
@@ -906,6 +908,7 @@ export class GhostModel {
   }
 
   private applyTwitch(dt: number, _time: number) {
+    if (this.gaze !== 0) this.pivot.quaternion.multiply(_q.setFromAxisAngle(AX_X, -this.gaze));
     if (this.twitchT > 0) {
       this.twitchT -= dt;
       this.pivot.quaternion.multiply(this.twitchQ);
@@ -920,6 +923,7 @@ export class GhostModel {
     this.scare = 0;
     this.reach = 0;
     this.writhe = 0;
+    this.gaze = 0;
     this.twitchT = 0;
     this.u.uDissolve.value = 1;
     this.u.uLit.value = 0;

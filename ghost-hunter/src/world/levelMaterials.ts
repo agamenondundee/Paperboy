@@ -19,8 +19,8 @@ export interface LevelMats {
   doorGlass: THREE.MeshStandardMaterial;
   carLights: THREE.MeshBasicMaterial;
   flame: THREE.MeshBasicMaterial;
-  /** Scroll rain on the glass and ripples on the car park. */
-  update(dt: number): void;
+  /** Scroll rain on the glass and ripples on the car park; flash (0..1) is the current lightning. */
+  update(dt: number, flash: number): void;
 }
 
 function rep(t: THREE.Texture, tileU: number, tileV = tileU) {
@@ -285,6 +285,7 @@ export function makeMaterials(assets: Assets, quality: Quality, atlas: Atlas): L
   const order: Record<string, number> = { ao: 1, paintDecal: 1, atlasDecal: 1, decal: 2, glass: 5, fence: 6, beam: 10 };
   const noCast = new Set(["atlas", "atlasDecal", "paintDecal", "blinds", "glass", "fence", "decal", "ao", "beam", "darkGlass"]);
 
+  let lastFlash = 0;
   return {
     mats,
     flags(key) {
@@ -302,7 +303,14 @@ export function makeMaterials(assets: Assets, quality: Quality, atlas: Atlas): L
     doorGlass,
     carLights,
     flame,
-    update(dt: number) {
+    update(dt: number, flash: number) {
+      // Lightning floods in through the windows and lights up the shafts.
+      if (flash !== lastFlash) {
+        lastFlash = flash;
+        (mats.moon as THREE.MeshBasicMaterial).color.setRGB(1 + flash * 5, 1 + flash * 5.5, 1 + flash * 6.5);
+        (mats.rainGlass as THREE.MeshBasicMaterial).color.setRGB(1 + flash * 3, 1 + flash * 3.4, 1 + flash * 4);
+        (mats.beam as THREE.ShaderMaterial).uniforms.uStrength.value = 1 + flash * 5;
+      }
       streaks.offset.y += dt * 0.045;
       if (streaks.offset.y > 1) streaks.offset.y -= 1;
       if (water) {

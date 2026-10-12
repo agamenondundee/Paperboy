@@ -374,9 +374,28 @@ function windowDecor(ctx: Ctx, e: EdgeSeg, ho: Hole) {
     equad(g, e, "glass", rect(s * 0.004), inN, null, { col: 0x8899aa, a: 0.16 });
   } else {
     equad(g, e, "darkGlass", rect(-s * 0.004), outN, null);
-    const top = new THREE.Color(0.06, 0.07, 0.11),
-      bot = new THREE.Color(0.26, 0.145, 0.06);
-    equad(g, e, "rainGlass", rect(s * 0.004), inN, [u0, y0, u1, y0, u1, y1, u0, y1], { cols: [bot, bot, top, top] });
+    // Cool night sky above, a low sodium glow from the car park below.
+    const top = new THREE.Color(0.05, 0.06, 0.095),
+      mid = new THREE.Color(0.085, 0.09, 0.12),
+      bot = new THREE.Color(0.2, 0.12, 0.055);
+    const ym = y0 + hgt * 0.35;
+    const band = (ya: number, yb: number, ca: THREE.Color, cb: THREE.Color) =>
+      equad(
+        g,
+        e,
+        "rainGlass",
+        [
+          [u0, ya, s * 0.004],
+          [u1, ya, s * 0.004],
+          [u1, yb, s * 0.004],
+          [u0, yb, s * 0.004],
+        ],
+        inN,
+        [u0, ya, u1, ya, u1, yb, u0, yb],
+        { cols: [ca, ca, cb, cb] }
+      );
+    band(y0, ym, bot, mid);
+    band(ym, y1, mid, top);
     if (kind === "gym") shaft(g, e, u0 + 0.05, u1 - 0.05, y0 + 0.05, y1 - 0.05, s, GYM_DIR, [0.022, 0.011, 0.003], [0.016, 0.008, 0.002]);
     else if (kind !== "kitchen") shaft(g, e, u0 + 0.05, u1 - 0.05, y0 + 0.05, y1 - 0.05, s, LAMP_DIR, [0.024, 0.012, 0.0035], [0.02, 0.01, 0.0025]);
   }
@@ -688,7 +707,8 @@ function frontDoors(ctx: Ctx): Shell {
     for (const m of chainOn) m.visible = shut;
     for (const m of chainOff) m.visible = !shut;
   };
-  set(0);
+  // map.ts starts with the entrance unlocked, so the doors start open (chain on the floor).
+  set(1);
   return { setFrontDoors: set };
 }
 

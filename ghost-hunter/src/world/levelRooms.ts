@@ -34,7 +34,7 @@ import {
 const H2 = WT / 2;
 const PI = Math.PI;
 
-function troffers(ctx: Ctx, k: string, xs: number[], zs: number[], alongX = false, intensity = 10) {
+function troffers(ctx: Ctx, k: string, xs: number[], zs: number[], alongX = false, intensity = 12) {
   const c = ROOMS[k].ceil;
   for (const x of xs) for (const z of zs) ctx.lights.addIndoor("troffer", x, c, z, alongX ? PI / 2 : 0, k, { intensity, range: 9, lightY: c - 0.35 });
 }
@@ -321,7 +321,7 @@ function library(ctx: Ctx) {
   g.reset();
   solidAt(55.2, 20.4, 0.5, 0.5, 0, 0.05);
   poster(ctx, "posterRead", 52.4, 1.6, f.n + 0.012, 0, 0.55);
-  troffers(ctx, "L", [43, 51, 59], [21.5, 27, 32.5], false, 11);
+  troffers(ctx, "L", [43, 51, 59], [21.5, 27, 32.5], false, 13);
 }
 
 const uvq = (ctx: Ctx, name: string) => {
@@ -632,7 +632,7 @@ function cafeteria(ctx: Ctx) {
   poster(ctx, "posterMissing", f.w + 0.012, 1.6, 40.5, PI / 2, 0.5);
   trashCan(ctx, 71.2, 40.0, false);
   trashCan(ctx, 89.2, 40.0, true);
-  troffers(ctx, "X", [67.5, 74, 80.5, 87, 93.5], [42.5, 47.5], true, 11);
+  troffers(ctx, "X", [67.5, 74, 80.5, 87, 93.5], [42.5, 47.5], true, 13);
 }
 
 function cafTable(ctx: Ctx, x: number, z: number, yaw: number) {
@@ -781,8 +781,8 @@ function lobby(ctx: Ctx) {
   ctx.geo.reset();
   picture(ctx, "bannerWelcome", 49.5, 4.15, 39 + H2 + 0.015, 0, 5.2);
   for (const z of [40.4, 47.6]) {
-    ctx.lights.addIndoor("sconce", f.w + 0.05, 2.7, z, PI / 2, "Y", { intensity: 4, range: 6, color: 0xffd6a8 });
-    ctx.lights.addIndoor("sconce", f.e - 0.05, 2.7, z, -PI / 2, "Y", { intensity: 4, range: 6, color: 0xffd6a8 });
+    ctx.lights.addIndoor("sconce", f.w + 0.05, 2.7, z, PI / 2, "Y", { intensity: 7, range: 7, color: 0xffd6a8 });
+    ctx.lights.addIndoor("sconce", f.e - 0.05, 2.7, z, -PI / 2, "Y", { intensity: 7, range: 7, color: 0xffd6a8 });
   }
   for (const [x, z] of [
     [42, 42.5],
@@ -791,7 +791,7 @@ function lobby(ctx: Ctx) {
     [57, 48.5],
     [49.5, 45],
   ])
-    ctx.lights.addIndoor("can", x, 5.0, z, 0, "Y", { intensity: 12, range: 10, lightY: 4.1 });
+    ctx.lights.addIndoor("can", x, 5.0, z, 0, "Y", { intensity: 18, range: 11, lightY: 3.7 });
   trashCan(ctx, 37.0, f.s - 0.6, false);
   // A fallen prom poster on the floor.
   ctx.geo.at(52.6, 0.006, 47.6, 0.6, -PI / 2).rect("atlas", 0.5, 0.75, ctx.atlas.uv("posterProm"));

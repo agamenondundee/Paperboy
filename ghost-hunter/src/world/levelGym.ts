@@ -44,7 +44,7 @@ export function buildGym(ctx: Ctx) {
   for (const x of [11, 22, 33])
     for (const z of [24.5, 34.5, 44.5]) {
       if (x === 22 && z === 34.5) continue;
-      ctx.lights.addIndoor("highbay", x, 5.95, z, 0, "G", { intensity: 45, range: 18, lightY: 5.6, cone: [5.9, 2.7, 0.04] });
+      ctx.lights.addIndoor("highbay", x, 5.95, z, 0, "G", { intensity: 75, range: 20, lightY: 5.6, cone: [5.9, 2.7, 0.04] });
     }
 
   // ------------------------------------------------------------- stage

@@ -101,7 +101,9 @@ export function buildLevel(scene: THREE.Scene, assets: Assets, quality: Quality)
     surfaceAt,
     writeOnWall: blood.write,
     update(dt: number, time: number) {
-      mats.update(dt);
+      // The renderer shares the current lightning flash (0..1) through scene.userData.
+      const flash = scene.userData.flash;
+      mats.update(dt, typeof flash === "number" ? flash : 0);
       const anim = ctx.anim;
       for (let i = 0; i < anim.length; i++) anim[i](dt, time);
       blood.update(dt);

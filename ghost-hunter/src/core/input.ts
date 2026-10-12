@@ -17,6 +17,22 @@ const KEYMAP: Record<string, Action> = {
   KeyP: "pause",
 };
 
+// Gamepad buttons (standard mapping): held actions and edge-triggered presses.
+const PAD_HELD: [number, Action][] = [
+  [7, "beam"],
+  [6, "breath"],
+  [4, "run"],
+  [10, "run"],
+];
+const PAD_EDGE: [number, Action][] = [
+  [0, "interact"],
+  [1, "crouch"],
+  [2, "torch"],
+  [3, "map"],
+  [8, "map"],
+  [9, "pause"],
+];
+
 /**
  * Unified input for keyboard and mouse, touch and gamepad.
  * Held actions are queried every simulation step; pressed actions are edge
@@ -41,6 +57,7 @@ export class Input {
   private stick = { id: -1, x: 0, y: 0, cx: 0, cy: 0 };
   private lookTouch = { id: -1, x: 0, y: 0 };
   private padPrev: boolean[] = [];
+  private lookOut: [number, number] = [0, 0];
   enabled = false;
 
   constructor(private canvas: HTMLCanvasElement) {
@@ -147,9 +164,12 @@ export class Input {
     this.crouchToggle = on;
   }
 
+  /** Look delta in radians since the last call. The tuple is reused: read it straight away. */
   consumeLook(): [number, number] {
     const s = settings.sensitivity * 0.0022;
-    const out: [number, number] = [this.lookX * s, this.lookY * s * (settings.invertY ? -1 : 1)];
+    const out = this.lookOut;
+    out[0] = this.lookX * s;
+    out[1] = this.lookY * s * (settings.invertY ? -1 : 1);
     this.lookX = 0;
     this.lookY = 0;
     return out;
@@ -157,11 +177,13 @@ export class Input {
 
   // ---------------------------------------------------------------- gamepad
   private padMove: [number, number] | null = null;
+  private padMoveBuf: [number, number] = [0, 0];
   private pollGamepad() {
     this.padMove = null;
     this.padHeld.clear();
-    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-    const gp = Array.from(pads).find((p) => p && p.connected);
+    const pads = navigator.getGamepads ? navigator.getGamepads() : null;
+    let gp: Gamepad | null = null;
+    if (pads) for (let i = 0; i < pads.length && !gp; i++) if (pads[i] && pads[i]!.connected) gp = pads[i];
     if (!gp) return;
     const dz = (v: number) => (Math.abs(v) < 0.15 ? 0 : (v - Math.sign(v) * 0.15) / 0.85);
     const lx = dz(gp.axes[0] || 0),
@@ -172,28 +194,16 @@ export class Input {
     const any = lx || ly || rx || ry || gp.buttons.some((b) => b.pressed);
     if (any) this.usingGamepad = true;
     if (!this.usingGamepad) return;
-    this.padMove = [lx, ly];
+    this.padMoveBuf[0] = lx;
+    this.padMoveBuf[1] = ly;
+    this.padMove = this.padMoveBuf;
     // Look speed in "pixels" so it shares the mouse sensitivity setting.
     const curve = (v: number) => Math.sign(v) * v * v;
     this.lookX += curve(rx) * 16;
     this.lookY += curve(ry) * 12;
-    const map: [number, Action][] = [
-      [7, "beam"],
-      [6, "breath"],
-      [4, "run"],
-      [10, "run"],
-    ];
-    for (const [i, a] of map) if (btn(i)) this.padHeld.add(a);
+    for (const [i, a] of PAD_HELD) if (btn(i)) this.padHeld.add(a);
     if (btn(7)) this.padHeld.add("breath");
-    const edge: [number, Action][] = [
-      [0, "interact"],
-      [1, "crouch"],
-      [2, "torch"],
-      [3, "map"],
-      [8, "map"],
-      [9, "pause"],
-    ];
-    for (const [i, a] of edge) {
+    for (const [i, a] of PAD_EDGE) {
       const now = btn(i);
       if (now && !this.padPrev[i]) {
         this.presses.add(a);

@@ -193,6 +193,7 @@ float gFloor = smoothstep(0.03, 0.8, vGWorld.y);
 diffuseColor.a = diffuseColor.a * gFloor * (0.8 + 0.2 * gShim) + gRimK * 0.35 * gFloor;
 diffuseColor.a = clamp(max(diffuseColor.a, gSock * gFloor), 0.0, 1.0);
 diffuseColor.a = max(diffuseColor.a, gEdge);
+outgoingLight *= 1.0 - 0.96 * gSock; // the sockets swallow light
 #include <opaque_fragment>
 `;
 

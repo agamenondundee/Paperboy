@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { type Ctx, solidAt, blob } from "./levelCtx";
-import type { Geo, UvRect } from "./levelGeo";
+import { F_PX, F_NX, F_PY, F_NY, F_PZ, type Geo, type UvRect } from "./levelGeo";
 
 /**
  * Furniture and wall dressing. Every builder works in a local frame (origin
@@ -416,10 +416,18 @@ export function fountain(ctx: Ctx, x: number, z: number, yaw: number) {
 
 export function extinguisher(ctx: Ctx, x: number, y: number, z: number, yaw: number) {
   const g = ctx.geo;
+  const red = { col: 0xa81616 };
   g.at(x, y, z, yaw);
-  g.box("paint", -0.22, -0.4, 0, 0.22, 0.4, 0.12, { col: 0xb01818 });
-  g.box("glass", -0.18, -0.36, 0.121, 0.18, 0.36, 0.125, { col: 0xc8d8e0, a: 0.3 });
-  cyl(g, "gloss", 0, -0.33, 0.06, 0.07, 0.5, 0xc01a1a);
+  // White-lined cabinet in a red frame, the extinguisher behind glass.
+  g.box("paint", -0.2, -0.38, 0, 0.2, 0.38, 0.11, { col: 0xd8d2c4, skip: F_PZ });
+  g.box("gloss", -0.23, -0.41, 0, 0.23, -0.36, 0.13, red);
+  g.box("gloss", -0.23, 0.36, 0, 0.23, 0.41, 0.13, red);
+  g.box("gloss", -0.23, -0.36, 0, -0.18, 0.36, 0.13, red);
+  g.box("gloss", 0.18, -0.36, 0, 0.23, 0.36, 0.13, red);
+  cyl(g, "gloss", 0, -0.35, 0.05, 0.075, 0.48, 0xc01a1a);
+  g.box("paint", -0.03, 0.13, 0.02, 0.05, 0.21, 0.08, { col: 0x151515 });
+  g.tube("paint", 0.04, 0.17, 0.05, 0.11, -0.16, 0.07, 0.011, 5, { col: 0x151515 });
+  g.box("glass", -0.18, -0.36, 0.118, 0.18, 0.36, 0.122, { col: 0xd0dce4, a: 0.14, skip: F_PX | F_NX | F_PY | F_NY });
   g.sub(0, 0.55, 0.002);
   g.rect("atlas", 0.2, 0.2, ctx.atlas.uv("fire"));
   g.reset();

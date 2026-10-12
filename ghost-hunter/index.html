@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#050608">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Brodie the Ghost Hunter: Hollow Creek High. A first-person horror game in the browser. Find the relics, banish three spirits and get back to the car before the clock strikes.">
+  <title>Brodie the Ghost Hunter</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cabin+Sketch:wght@400;700&family=Oswald:wght@400;500;600;700&family=Special+Elite&display=swap" rel="stylesheet">
+  <style>
+    /* Critical paint before the stylesheet arrives: never flash white. */
+    html, body { margin: 0; height: 100%; background: #050608; color: #ebe4d3; overflow: hidden; }
+    .overlay:not(.show) { visibility: hidden; opacity: 0; }
+    #hud.hidden { visibility: hidden; }
+  </style>
+</head>
+<body>
+  <div id="game" aria-hidden="true"></div>
+
+  <!-- Full-screen effects sit above the 3D view and below the HUD text. -->
+  <div id="fx" aria-hidden="true">
+    <div id="vents"><div class="slats"></div></div>
+  </div>
+  <!-- Flashes and the jump-scare frame go over the HUD. -->
+  <div id="fxTop" aria-hidden="true">
+    <div id="flashRed" class="flash"></div>
+    <div id="flashWhite" class="flash"></div>
+    <div id="flashUv" class="flash"></div>
+    <div id="scare"><canvas id="scareCanvas" width="768" height="768"></canvas><div class="scare-tint"></div></div>
+  </div>
+
+  <!-- ================================================================ HUD -->
+  <div id="hud" class="hidden">
+    <div id="fps" class="mono" hidden></div>
+
+    <div id="objectiveBox">
+      <span class="eyebrow">Objective</span>
+      <p id="objective"></p>
+    </div>
+    <div id="timer" hidden aria-live="off"></div>
+
+    <aside id="tally" class="hud-panel" aria-label="Spirits and relics">
+      <h3>Spirits</h3>
+      <ul id="spirits"></ul>
+      <h3>Relics</h3>
+      <ul id="relics"></ul>
+    </aside>
+
+    <div id="bars" class="hud-panel">
+      <div class="bar nerve" id="barNerve">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.1C.9 8.6 2.9 4.5 6.7 4.5c2.2 0 3.6 1.2 5.3 3.1 1.7-1.9 3.1-3.1 5.3-3.1 3.8 0 5.8 4.1 4.3 7.4C19.5 16.4 12 21 12 21z"/></svg>
+        <span class="lbl">Nerve</span>
+        <div class="track"><i class="fill"></i><i class="ghost-fill"></i></div>
+      </div>
+      <div class="bar uv" id="barBattery">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>
+        <span class="lbl">UV</span>
+        <div class="track"><i class="fill"></i></div>
+      </div>
+      <div class="bar stamina" id="barStamina">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M13.5 5.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM9.8 8.9 7 23h2.1l1.8-8 2.1 2v6h2v-7.5l-2.1-2 .6-3A7.3 7.3 0 0 0 19 13v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1L6 8.3V13h2V9.6z"/></svg>
+        <span class="lbl">Stamina</span>
+        <div class="track"><i class="fill"></i></div>
+      </div>
+    </div>
+
+    <div id="breath" aria-hidden="true">
+      <span id="breathLabel">Hold your breath</span>
+      <div class="track"><i class="fill"></i></div>
+    </div>
+
+    <div id="crosshair" aria-hidden="true">
+      <svg viewBox="0 0 44 44">
+        <circle class="ring-bg" cx="22" cy="22" r="17"/>
+        <circle id="ring" class="ring" cx="22" cy="22" r="17"/>
+      </svg>
+      <i class="dot"></i>
+    </div>
+    <div id="prompt" aria-live="polite"></div>
+
+    <div id="pa" aria-live="polite"><span class="pa-tag">PA</span><span id="paText"></span></div>
+    <div id="msgs">
+      <div id="captions" aria-live="polite"></div>
+      <div id="toasts" aria-live="polite"></div>
+    </div>
+
+    <!-- Touch controls (ids are read by src/core/input.ts) -->
+    <div id="touch">
+      <div class="t-util">
+        <button id="tPause" class="tbtn small" type="button" aria-label="Pause">
+          <svg viewBox="0 0 24 24"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg>
+        </button>
+        <button id="tMap" class="tbtn small" type="button" aria-label="Map">
+          <svg viewBox="0 0 24 24"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2zm0 2.2 6 2v11.6l-6-2z"/></svg>
+        </button>
+        <button id="tTorch" class="tbtn small" type="button" aria-label="Torch">
+          <svg viewBox="0 0 24 24"><path d="M7 2h10v4l-3 4v12h-4V10L7 6zm4 10v3h2v-3z"/></svg>
+        </button>
+      </div>
+      <div id="stick" aria-label="Move"><div id="nub"></div></div>
+      <div class="t-actions">
+        <button id="tCrouch" class="tbtn" type="button" aria-label="Crouch">
+          <svg viewBox="0 0 24 24"><path d="M12 3.5a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM8 10l2.5-1.2h3L16 10l1 4h-2l-.7-2.3-1.3.4V15l3 2v4h-2v-3l-3-1.7L9 18v3H7v-4l3-2v-2.9l-1.3-.4L8 14H6z"/></svg>
+          <span>Crouch</span>
+        </button>
+        <button id="tRun" class="tbtn" type="button" aria-label="Run">
+          <svg viewBox="0 0 24 24"><path d="M13.5 5.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM9.8 8.9 7 23h2.1l1.8-8 2.1 2v6h2v-7.5l-2.1-2 .6-3A7.3 7.3 0 0 0 19 13v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1L6 8.3V13h2V9.6z"/></svg>
+          <span>Run</span>
+        </button>
+        <button id="tAct" class="tbtn" type="button" aria-label="Use">
+          <svg viewBox="0 0 24 24"><path d="M9 11.2V5.5a1.5 1.5 0 0 1 3 0V11h.5V3.5a1.5 1.5 0 0 1 3 0V11h.5V5a1.5 1.5 0 0 1 3 0v9.5c0 4-2.7 7.5-7 7.5-3 0-4.6-1.5-6-3.6L3.6 14a1.6 1.6 0 0 1 2.6-1.8z"/></svg>
+          <span>Use</span>
+        </button>
+        <button id="tBeam" class="tbtn big" type="button" aria-label="UV beam, hold">
+          <svg viewBox="0 0 24 24"><path d="M2 9h8l9-5v16l-9-5H2zm19 1h2v4h-2z"/></svg>
+          <span>UV</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ MAP -->
+  <div id="mapOverlay" class="overlay map-overlay" role="dialog" aria-label="Map">
+    <div class="map-frame">
+      <header class="map-head">
+        <div>
+          <h2>Hollow Creek High</h2>
+          <p class="chalk">Ground floor plan, as found</p>
+        </div>
+        <button id="mapClose" class="btn ghost small" type="button">Close</button>
+      </header>
+      <div id="mapWrap"><canvas id="mapCanvas"></canvas></div>
+      <footer class="map-legend">
+        <span><i class="lg lg-you"></i>You</span>
+        <span><i class="lg lg-relic"></i>Relic</span>
+        <span><i class="lg lg-note"></i>Note</span>
+        <span><i class="lg lg-hint"></i>Clue</span>
+        <span><i class="lg lg-car"></i>Car</span>
+        <span class="keyhint">Tab or M to close</span>
+      </footer>
+    </div>
+  </div>
+
+  <!-- ======================================================== LOADING -->
+  <div id="loading" class="overlay show grain" role="status" aria-live="polite">
+    <div class="loading-inner">
+      <p class="eyebrow">Hollow Creek High</p>
+      <h2 class="loading-title">Brodie the Ghost Hunter</h2>
+      <div class="progress"><i id="loadBar"></i></div>
+      <p id="loadLabel" class="mono">Waking the dead</p>
+      <p id="loadTip" class="tip"></p>
+    </div>
+  </div>
+
+  <!-- ========================================================== TITLE -->
+  <div id="title" class="overlay title-overlay grain" role="dialog" aria-labelledby="titleHeading">
+    <div id="titleBg" class="cover-bg"></div>
+    <div class="title-shade"></div>
+    <div class="title-layout">
+      <header class="title-head">
+        <p class="eyebrow">A level 99 ghost hunter returns</p>
+        <h1 id="titleHeading" class="game-title flicker">
+          <span class="gt-small">Brodie the</span>
+          <span class="gt-big">Ghost Hunter</span>
+        </h1>
+        <p class="subtitle chalk">Hollow Creek High</p>
+        <p class="premise">Prom night, 1987. Three spirits never left the school, and every clock stopped at 11:47.</p>
+      </header>
+
+      <fieldset class="difficulty" id="difficulty">
+        <legend class="eyebrow">Difficulty</legend>
+        <label class="diff">
+          <input type="radio" name="diff" value="easy">
+          <span class="diff-card"><b>Easy</b><small id="diffEasy"></small></span>
+        </label>
+        <label class="diff">
+          <input type="radio" name="diff" value="normal">
+          <span class="diff-card"><b>Normal</b><small id="diffNormal"></small></span>
+        </label>
+        <label class="diff nightmare">
+          <input type="radio" name="diff" value="nightmare">
+          <span class="diff-card"><b>Nightmare</b><small id="diffNightmare"></small></span>
+        </label>
+      </fieldset>
+
+      <div class="title-actions">
+        <button id="btnStart" class="btn primary" type="button">Start</button>
+        <button id="btnHow" class="btn" type="button">How to play</button>
+        <button id="btnSettings" class="btn" type="button">Settings</button>
+      </div>
+      <p id="titleBest" class="best mono" hidden></p>
+
+      <footer class="credits">
+        Head scan by Lee Perry-Smith (CC BY 3.0). Character rig from Mixamo. Night sky HDRI from Poly Haven (CC0). Textures from the three.js examples. Generated art made with Higgsfield.
+      </footer>
+    </div>
+  </div>
+
+  <!-- ===================================================== HOW TO PLAY -->
+  <div id="how" class="overlay panel-overlay" role="dialog" aria-labelledby="howHeading">
+    <div class="panel glass wide">
+      <header class="panel-head">
+        <h2 id="howHeading">How to play</h2>
+        <button class="btn ghost small" type="button" data-back>Back</button>
+      </header>
+      <div class="panel-body">
+        <ol class="rules">
+          <li>Each spirit is <b>anchored by a relic</b> hidden somewhere in the school. Find it.</li>
+          <li>Your <b>UV beam</b> only drives a spirit away. Carry its relic and the beam <b>burns it</b> until it is at rest.</li>
+          <li>UV light reveals handprints, footprints and writing that lead to the relics. Notes help too.</li>
+          <li>Running is loud and your torch gives you away. Crouch in the dark to stay unseen.</li>
+          <li><b>Hide in lockers</b> and hold your breath when something comes close.</li>
+          <li>Put all three to rest, then <b>get back to the car</b> before the clock strikes.</li>
+        </ol>
+
+        <div class="controls-grid">
+          <section>
+            <h3>Keyboard and mouse</h3>
+            <dl>
+              <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>Move</dd>
+              <dt><kbd>Mouse</kbd></dt><dd>Look</dd>
+              <dt><kbd>Shift</kbd></dt><dd>Run</dd>
+              <dt><kbd>C</kbd> <kbd>Ctrl</kbd></dt><dd>Crouch</dd>
+              <dt><kbd>Left click</kbd> <kbd>Space</kbd></dt><dd>UV beam</dd>
+              <dt><kbd>Space</kbd></dt><dd>Hold breath in a locker</dd>
+              <dt><kbd>E</kbd> <kbd>Right click</kbd></dt><dd>Use, read, hide</dd>
+              <dt><kbd>F</kbd></dt><dd>Torch</dd>
+              <dt><kbd>Tab</kbd> <kbd>M</kbd></dt><dd>Map</dd>
+              <dt><kbd>Esc</kbd> <kbd>P</kbd></dt><dd>Pause</dd>
+            </dl>
+          </section>
+          <section>
+            <h3>Gamepad</h3>
+            <dl>
+              <dt><kbd>Left stick</kbd></dt><dd>Move</dd>
+              <dt><kbd>Right stick</kbd></dt><dd>Look</dd>
+              <dt><kbd>LB</kbd> <kbd>L3</kbd></dt><dd>Run</dd>
+              <dt><kbd>B</kbd></dt><dd>Crouch</dd>
+              <dt><kbd>RT</kbd></dt><dd>UV beam</dd>
+              <dt><kbd>LT</kbd></dt><dd>Hold breath</dd>
+              <dt><kbd>A</kbd></dt><dd>Use, read, hide</dd>
+              <dt><kbd>X</kbd></dt><dd>Torch</dd>
+              <dt><kbd>Y</kbd> <kbd>View</kbd></dt><dd>Map</dd>
+              <dt><kbd>Menu</kbd></dt><dd>Pause</dd>
+            </dl>
+          </section>
+          <section>
+            <h3>Touch</h3>
+            <dl>
+              <dt><kbd>Left stick</kbd></dt><dd>Move</dd>
+              <dt><kbd>Drag</kbd></dt><dd>Look</dd>
+              <dt><kbd>UV</kbd></dt><dd>Hold for the beam, or to hold your breath</dd>
+              <dt><kbd>Run</kbd></dt><dd>Hold to run</dd>
+              <dt><kbd>Crouch</kbd></dt><dd>Toggle crouch</dd>
+              <dt><kbd>Use</kbd></dt><dd>Use, read, hide</dd>
+              <dt><kbd>Torch</kbd> <kbd>Map</kbd></dt><dd>Top left</dd>
+            </dl>
+          </section>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================== SETTINGS -->
+  <div id="settings" class="overlay panel-overlay" role="dialog" aria-labelledby="settingsHeading">
+    <div class="panel glass">
+      <header class="panel-head">
+        <h2 id="settingsHeading">Settings</h2>
+        <button class="btn ghost small" type="button" data-back>Back</button>
+      </header>
+      <div class="panel-body settings-list">
+        <label class="row">
+          <span class="row-label">Look sensitivity <output id="outSens"></output></span>
+          <input id="setSens" type="range" min="0.2" max="3" step="0.05">
+        </label>
+        <label class="row">
+          <span class="row-label">Field of view <output id="outFov"></output></span>
+          <input id="setFov" type="range" min="60" max="100" step="1">
+        </label>
+        <label class="row">
+          <span class="row-label">Volume <output id="outVol"></output></span>
+          <input id="setVol" type="range" min="0" max="1" step="0.05">
+        </label>
+        <label class="row inline">
+          <span class="row-label">Graphics quality</span>
+          <select id="setQuality">
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="ultra">Ultra</option>
+          </select>
+        </label>
+        <label class="row inline toggle">
+          <span class="row-label">Invert look up and down</span>
+          <input id="setInvert" type="checkbox">
+        </label>
+        <label class="row inline toggle">
+          <span class="row-label">Head bob</span>
+          <input id="setBob" type="checkbox">
+        </label>
+        <label class="row inline toggle">
+          <span class="row-label">Gentle mode<small>Fewer flashes and softer scares</small></span>
+          <input id="setGentle" type="checkbox">
+        </label>
+        <label class="row inline toggle">
+          <span class="row-label">Captions<small>Subtitles for important sounds</small></span>
+          <input id="setCaptions" type="checkbox">
+        </label>
+        <label class="row inline toggle">
+          <span class="row-label">Show frame rate</span>
+          <input id="setFps" type="checkbox">
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================== PAUSE -->
+  <div id="pause" class="overlay panel-overlay dim" role="dialog" aria-labelledby="pauseHeading">
+    <div class="panel glass narrow">
+      <h2 id="pauseHeading" class="pause-title">Paused</h2>
+      <p class="chalk pause-sub">The school waits for you.</p>
+      <div class="stack">
+        <button id="btnResume" class="btn primary" type="button">Resume</button>
+        <button id="btnPauseSettings" class="btn" type="button">Settings</button>
+        <button id="btnPauseHow" class="btn" type="button">How to play</button>
+        <button id="btnRestart" class="btn" type="button">Restart</button>
+        <button id="btnQuit" class="btn ghost" type="button">Quit to title</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ NOTE -->
+  <div id="note" class="overlay note-overlay" role="dialog" aria-labelledby="noteTitle">
+    <article class="paper">
+      <h2 id="noteTitle"></h2>
+      <div id="noteBody"></div>
+      <footer class="paper-foot">
+        <button id="noteClose" class="btn paper-btn" type="button">Put it away</button>
+        <span class="keyhint">E or Esc</span>
+      </footer>
+    </article>
+  </div>
+
+  <!-- ============================================================= END -->
+  <div id="end" class="overlay end-overlay grain" role="dialog" aria-labelledby="endTitle">
+    <div id="endBg" class="cover-bg"></div>
+    <div class="end-shade"></div>
+    <div class="end-card glass">
+      <p id="endKicker" class="eyebrow"></p>
+      <h2 id="endTitle"></h2>
+      <p id="endText"></p>
+      <div class="end-results">
+        <div class="rank-wrap">
+          <span class="eyebrow">Rank</span>
+          <span id="endRank" class="rank">C</span>
+          <span id="endBest" class="stamp" hidden>New best</span>
+        </div>
+        <dl class="stats">
+          <div><dt>Score</dt><dd id="endScore" class="mono">0</dd></div>
+          <div><dt>Time</dt><dd id="endTime" class="mono">0:00</dd></div>
+          <div><dt>Notes found</dt><dd id="endNotes" class="mono">0</dd></div>
+          <div><dt>Continues used</dt><dd id="endConts" class="mono">0</dd></div>
+        </dl>
+      </div>
+      <div class="end-actions">
+        <button id="btnContinue" class="btn primary" type="button">Continue</button>
+        <button id="btnRetry" class="btn" type="button">Try again</button>
+        <button id="btnEndQuit" class="btn ghost" type="button">Quit to title</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================== INTRO -->
+  <div id="intro" class="overlay intro-overlay" aria-label="Intro">
+    <video id="introVideo" playsinline preload="auto"></video>
+    <button id="introSkip" class="btn ghost small" type="button">Skip</button>
+  </div>
+
+  <!-- =========================================================== ERROR -->
+  <div id="error" class="overlay error-overlay" role="alertdialog" aria-labelledby="errorHeading">
+    <div class="panel glass narrow">
+      <h2 id="errorHeading">Something went wrong</h2>
+      <pre id="errorText"></pre>
+      <button id="errorReload" class="btn primary" type="button">Reload</button>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

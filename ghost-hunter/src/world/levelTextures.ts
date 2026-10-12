@@ -800,13 +800,13 @@ export function moonGlass(w: number, h: number): THREE.Texture {
 export function rainStreaks(w: number, h: number): THREE.Texture {
   const r = mulberry32(1616);
   const c = canvas(w, h, (g) => {
-    g.fillStyle = grey(140);
+    g.fillStyle = grey(150);
     g.fillRect(0, 0, w, h);
-    noise(g, w, h, 8, r, 0.25, "overlay");
-    for (let i = 0; i < 40; i++) {
+    noise(g, w, h, 8, r, 0.2, "overlay");
+    for (let i = 0; i < 22; i++) {
       const x0 = r() * w;
-      g.strokeStyle = `rgba(255,255,255,${0.25 + r() * 0.35})`;
-      g.lineWidth = 1 + r() * 2;
+      g.strokeStyle = `rgba(255,255,255,${0.12 + r() * 0.2})`;
+      g.lineWidth = 0.8 + r();
       for (const oy of [-h, 0, h]) {
         let x = x0,
           y = r() * h + oy;
@@ -821,7 +821,7 @@ export function rainStreaks(w: number, h: number): THREE.Texture {
         g.stroke();
       }
     }
-    for (let i = 0; i < 260; i++) {
+    for (let i = 0; i < 340; i++) {
       const x = r() * w,
         y = r() * h,
         s = 0.8 + r() * 2.2;
