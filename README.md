@@ -30,6 +30,12 @@ with a long axe fights through waves of ghouls in a fog-drowned graveyard,
 with a root-covered boss every third wave. Open it in a browser; it needs
 no build step.
 
+The scene uses bloom, per-character lantern lighting, god rays, colour
+grading and film grain, and drops the costliest effects automatically on
+slower devices. Blood sprays, pools and stays on the ground; heavy blows
+can behead ghouls.
+
 Controls: A/D move, W or Space jump, J or click to swing, K or right click
-for a heavy blow, Shift to roll, E to drink a vial, P to pause, M for sound.
+for a heavy blow, Shift to roll, E to drink a vial, P to pause, M for sound
+and B to turn blood on or off.
 On phones and tablets on-screen buttons appear instead.
