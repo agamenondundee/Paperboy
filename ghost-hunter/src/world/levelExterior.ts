@@ -430,7 +430,9 @@ function sedan(ctx: Ctx, x: number, z: number, yaw: number) {
   g.box("chrome", -0.95, 0.36, 2.52, 0.95, 0.52, 2.66, { col: 0x8a8a84 });
   wheels(g, hw, [-1.4, 1.35], 0.33, 0.36, 0.82);
   g.reset();
-  for (let i = 0; i < 6; i++) splat(ctx, ...offset3(loc(x, z, yaw, (ctx.rng() - 0.5) * 1.6, (ctx.rng() - 0.5) * 4), 0.95 + ctx.rng() * 0.3), yaw, -PI / 2, 0.35 + ctx.rng() * 0.3, 0x5a2a10, 0.8);
+  // Oil leaked from the engine over the years.
+  splat(ctx, ...offset3(loc(x, z, yaw, 0.1, -1.6), 0.005), yaw, -PI / 2, 1.3, 0x0c0a08, 0.7);
+  splat(ctx, ...offset3(loc(x, z, yaw, -0.3, 0.4), 0.005), yaw, -PI / 2, 0.8, 0x0c0a08, 0.5);
   solidAt(x, z, 1.95, 5.3, yaw, 0.1);
   blob(ctx, x, z, 2.7, 6.0, yaw, 0.85);
 }

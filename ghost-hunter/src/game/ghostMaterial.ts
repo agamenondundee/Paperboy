@@ -84,12 +84,16 @@ varying vec3 vGWorld;
 varying vec3 vGObj;
 #if defined(GHOST_HAIR) || defined(GHOST_SKIRT)
 attribute float aSway;
+varying float vGSway;
 #endif
 `;
 
 const VERT_BEGIN = /* glsl */ `
 #include <begin_vertex>
 vGObj = position;
+#if defined(GHOST_HAIR) || defined(GHOST_SKIRT)
+vGSway = aSway;
+#endif
 #ifdef GHOST_HAIR
 {
   float s = aSway * aSway;
@@ -127,6 +131,9 @@ uniform vec3 uOrigin;
 uniform vec3 uPale;
 varying vec3 vGWorld;
 varying vec3 vGObj;
+#if defined(GHOST_HAIR) || defined(GHOST_SKIRT)
+varying float vGSway;
+#endif
 ${NOISE}
 `;
 
@@ -145,6 +152,7 @@ float gSm = 0.5;
 #ifdef GHOST_SKIRT
   float gTat = gNoise(vGObj * vec3(26.0, 9.0, 26.0));
   if (gTat < smoothstep(-0.55, -1.0, vGObj.y) * 0.62) discard;
+  diffuseColor.a *= smoothstep(0.0, 0.06, vGSway); // soft waistline
 #endif
 `;
 

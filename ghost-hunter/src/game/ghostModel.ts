@@ -229,8 +229,8 @@ function withSway(g: THREE.BufferGeometry, value = 0) {
   return g;
 }
 
-/** Long hair: a scalp cap plus hanging strand cards, relative to HEAD_CENTRE. */
-function buildHair(): THREE.BufferGeometry {
+/** Long hair, relative to HEAD_CENTRE: [scalp cap, hanging strand cards]. */
+function buildHair(): [THREE.BufferGeometry, THREE.BufferGeometry] {
   const r = mulberry32(5161987);
   // The scanned skull, as an ellipsoid around (CX, 0, CZ) from HEAD_CENTRE.
   const RX = 0.082,
@@ -242,6 +242,9 @@ function buildHair(): THREE.BufferGeometry {
   cap.scale(RX + 0.007, RY + 0.007, RZ + 0.007);
   cap.rotateX(-0.32);
   cap.translate(CX, 0.002, CZ);
+  // Use only the dense upper part of the strand texture, wrapped a few times.
+  const cuv = cap.getAttribute("uv") as THREE.BufferAttribute;
+  for (let i = 0; i < cuv.count; i++) cuv.setXY(i, cuv.getX(i) * 5, 1 - (1 - cuv.getY(i)) * 0.4);
   withSway(cap, 0);
 
   const pos: number[] = [],
@@ -257,7 +260,7 @@ function buildHair(): THREE.BufferGeometry {
       const L = (side ? 0.3 + r() * 0.1 : 0.42 + r() * 0.13) * lenK;
       const cos2 = Math.cos(psi0) ** 2;
       const yr = 0.06 - 0.03 * cos2 - r() * 0.01;
-      const w0 = 0.03 + r() * 0.02;
+      const w0 = 0.02 + r() * 0.014;
       const u0 = r() * 0.5;
       const twist = (r() - 0.5) * 0.12;
       const base = pos.length / 3;
@@ -293,15 +296,16 @@ function buildHair(): THREE.BufferGeometry {
       }
     }
   };
-  layer(44, 0.01, 1);
-  layer(30, 0.02, 0.85);
+  layer(64, 0.01, 1);
+  layer(44, 0.019, 0.85);
   const strands = new THREE.BufferGeometry();
   strands.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
   strands.setAttribute("normal", new THREE.Float32BufferAttribute(nor, 3));
   strands.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
   strands.setAttribute("aSway", new THREE.Float32BufferAttribute(sway, 1));
   strands.setIndex(idx);
-  return mergeAll([cap, strands]);
+  strands.computeBoundingSphere();
+  return [cap, strands];
 }
 
 /** Bell skirt from the waist, tattered hem, relative to WAIST. */
@@ -501,7 +505,7 @@ function buildRobe(): THREE.BufferGeometry {
     const phi = Math.atan2(p.getX(i), p.getZ(i));
     if (i % prof.length === prof.length - 1) p.setY(i, y + (Math.sin(phi * 5 + 0.7) * 0.5 + 0.5) * (Math.sin(phi * 11) * 0.5 + 0.5) * 0.12);
     p.setX(i, p.getX(i) * 1.1);
-    sway[i] = clamp((0.1 - y) / 1.16, 0, 1);
+    sway[i] = clamp((0.47 - y) / 1.53, 0, 1);
   }
   g.setAttribute("aSway", new THREE.BufferAttribute(sway, 1));
   g.computeVertexNormals();
@@ -564,6 +568,8 @@ export class GhostModel {
   private sleeves: THREE.Object3D[] = [];
   private figure: THREE.Object3D | null = null;
   private keySwing: THREE.Object3D | null = null;
+  private hang: THREE.Object3D | null = null;
+  private headChain: THREE.Object3D[] = [];
   private twitchT = 0;
   private twitchQ = new THREE.Quaternion();
   private kv = 0;
@@ -640,6 +646,7 @@ export class GhostModel {
 
     this.buildHead(kit, headBind);
     this.buildProps(kit, headBind, hipsObj, hipsBind, chestObj, chestBind);
+    for (let o: THREE.Object3D | null = this.pivot; o && o !== this.body; o = o.parent) this.headChain.unshift(o);
     this.root.traverse((o) => {
       o.castShadow = false;
       o.receiveShadow = false;
@@ -747,9 +754,16 @@ export class GhostModel {
     if (this.kind === "queen") {
       const hm = head();
       const hairMat = this.mat(
-        ghostMaterial(u, "hair", { color: 0xffffff, opacity: 0.97, rim: 0.3, roughness: 0.7, map: kit.hairTex, side: THREE.DoubleSide, alphaTest: 0.32 })
+        ghostMaterial(u, "hair", { color: 0x5a5060, opacity: 0.97, rim: 0.2, roughness: 0.85, map: kit.hairTex, side: THREE.DoubleSide, alphaTest: 0.32 })
       );
-      hm.add(new THREE.Mesh(kit.geo("hair", buildHair), hairMat));
+      let hair: [THREE.BufferGeometry, THREE.BufferGeometry] | null = null;
+      const hp = () => (hair ||= buildHair());
+      hm.add(new THREE.Mesh(kit.geo("hairCap", () => hp()[0]), hairMat));
+      // Strands hang from a group that is turned back towards upright each
+      // frame, so the hair falls with gravity rather than with the skull.
+      const hang = (this.hang = new THREE.Group());
+      hang.add(new THREE.Mesh(kit.geo("hairStrands", () => hp()[1]), hairMat));
+      hm.add(hang);
 
       let parts: [THREE.BufferGeometry, THREE.BufferGeometry] | null = null;
       const tp = () => (parts ||= buildTiara());
@@ -810,6 +824,12 @@ export class GhostModel {
 
     if (this.mixer) this.animateRig(dt, time);
     else this.animateFigure(dt, time);
+
+    if (this.hang) {
+      _q.identity();
+      for (const n of this.headChain) _q.multiply(n.quaternion);
+      this.hang.quaternion.slerpQuaternions(IDENT, _q.invert(), 0.75);
+    }
 
     if (this.keySwing) {
       const k = clamp(s / 1.6, 0, 1);

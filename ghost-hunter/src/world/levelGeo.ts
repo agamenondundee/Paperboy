@@ -166,6 +166,10 @@ export class Geo {
 
   /** Axis-aligned box in the current frame. `keys` is one bucket or one per face (+x,-x,+y,-y,+z,-z; null skips). */
   box(keys: string | readonly (string | null)[], x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, o?: GOpts) {
+    // Accept corners in any order; reversed bounds would turn the box inside out.
+    if (x0 > x1) [x0, x1] = [x1, x0];
+    if (y0 > y1) [y0, y1] = [y1, y0];
+    if (z0 > z1) [z0, z1] = [z1, z0];
     this.colour(o);
     const s = o?.uv ?? 1,
       ou = o?.uvOff ? o.uvOff[0] : 0,

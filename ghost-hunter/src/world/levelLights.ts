@@ -25,6 +25,8 @@ interface Rec {
   cone: { len: number; rad: number; k: number } | null;
   inst: number;
   coneInst: number;
+  /** Takes part in the per-room draw of broken fixtures. */
+  mayBreak: boolean;
 }
 
 export interface AddOpts {
@@ -135,6 +137,7 @@ export class Fixtures {
       cone: o.cone ? { len: o.cone[0], rad: o.cone[1], k: o.cone[2] } : null,
       inst: -1,
       coneInst: -1,
+      mayBreak: false,
     };
     this.recs.push(rec);
     this.list.push(f);
@@ -142,9 +145,29 @@ export class Fixtures {
     return f;
   }
 
-  /** Indoor fixture that starts broken about 35% of the time. */
+  /** Indoor fixture; 35% of these in each room start broken (decided in build). */
   addIndoor(shape: Shape, x: number, y: number, z: number, yaw: number, room: string, o: Omit<AddOpts, "broken">) {
-    return this.add(shape, x, y, z, yaw, room, { ...o, broken: this.rng() < 0.35 });
+    const f = this.add(shape, x, y, z, yaw, room, o);
+    this.recs[this.recs.length - 1].mayBreak = true;
+    return f;
+  }
+
+  private breakSome() {
+    const byRoom = new Map<string, Rec[]>();
+    for (const r of this.recs) {
+      if (!r.mayBreak) continue;
+      let a = byRoom.get(r.f.room);
+      if (!a) byRoom.set(r.f.room, (a = []));
+      a.push(r);
+    }
+    for (const list of byRoom.values()) {
+      for (let i = list.length - 1; i > 0; i--) {
+        const j = Math.floor(this.rng() * (i + 1));
+        [list[i], list[j]] = [list[j], list[i]];
+      }
+      const k = Math.round(list.length * 0.35);
+      list.forEach((r, i) => (r.f.level = r.baseLevel = i < k ? 0 : 1));
+    }
   }
 
   private housing(shape: Shape, x: number, y: number, z: number, yaw: number) {
@@ -203,6 +226,7 @@ export class Fixtures {
 
   /** Create the instanced emissive meshes and light cones. */
   build(scene: THREE.Scene): THREE.Object3D[] {
+    this.breakSome();
     const out: THREE.Object3D[] = [];
     const byShape = new Map<Shape, Rec[]>();
     for (const r of this.recs) {
