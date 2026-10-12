@@ -1,0 +1,22 @@
+{
+  "name": "brodie-ghost-hunter",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Brodie the Ghost Hunter: a first-person horror game in the browser",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "postprocessing": "6.36.4",
+    "three": "0.169.0"
+  },
+  "devDependencies": {
+    "@types/three": "0.169.0",
+    "typescript": "5.6.3",
+    "vite": "5.4.10"
+  }
+}
