@@ -42,6 +42,10 @@ export interface Assets {
     endingVideo?: string;
     /** Short clips (vision-queen.mp4 and so on) played the first time each spirit is spotted. */
     visions?: Partial<Record<GhostKind, string>>;
+    /** Filmed apparition loops (ghost-queen.mp4 and so on) that replace the 3D ghost bodies. */
+    ghostLoops?: Partial<Record<GhostKind, string>>;
+    /** Prom night flashback played the first time the player enters the gym. */
+    flashbackGym?: string;
   };
   xbot: GLTF | null; // rigged mannequin with clips: idle, walk, run, sneak_pose, sad_pose, agree, headShake
   lee: GLTF | null; // scanned head mesh

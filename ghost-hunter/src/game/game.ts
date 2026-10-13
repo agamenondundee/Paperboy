@@ -176,6 +176,7 @@ export class Game {
   /** A ghost vision clip is playing; the game is frozen underneath it. */
   private cutscene = false;
   private visionsShown = new Set<string>();
+  private gymSeen = false;
   private headFlickT = 0;
   private headFlickered = false;
   private headOn = true;
@@ -411,6 +412,7 @@ export class Game {
     this.repelTold = false;
     this.spottedTold = false;
     this.visionsShown.clear();
+    this.gymSeen = false;
     this.headFlickT = 0;
     this.headFlickered = false;
     this.hollowOut = false;
@@ -776,6 +778,18 @@ export class Game {
 
     // Phase triggers.
     if (this.phase === "intro" && s.room === "Y" && s.z < LOBBY_TRIGGER_Z) this.startHunt();
+    if (s.room === "G" && !this.gymSeen && this.phase === "hunt") {
+      this.gymSeen = true;
+      const clip = this.assets.gen.flashbackGym;
+      if (clip && !this.cutscene) {
+        this.cutscene = true;
+        this.menus.playIntro(clip).then(() => {
+          this.cutscene = false;
+          this.input.clearPresses();
+          this.hud.caption("The music stops. The gym is empty again.");
+        });
+      }
+    }
 
     // Spirits.
     if (playing) {

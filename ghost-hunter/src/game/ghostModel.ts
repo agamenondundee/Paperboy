@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { DemonDog } from "./ghostDog";
+import { Apparition } from "./ghostApparition";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
@@ -84,10 +85,13 @@ export class GhostKit {
   readonly headMap: THREE.Texture | null;
   readonly headNormal: THREE.Texture | null;
   readonly pupilGeo = new THREE.SphereGeometry(0.1, 10, 8);
+  /** Filmed apparition loops by kind, when present. */
+  readonly loops: Partial<Record<GhostKind, string>>;
   private cache = new Map<string, THREE.BufferGeometry>();
   private hairTexture: THREE.Texture | null = null;
 
   constructor(assets: Assets) {
+    this.loops = assets.gen.ghostLoops ?? {};
     this.xbot = assets.xbot && assets.xbot.scene ? assets.xbot : null;
     if (this.xbot) {
       const find = (n: string) => this.xbot!.animations.find((c) => c.name === n) || null;
@@ -579,6 +583,8 @@ export class GhostModel {
   private mats: THREE.Material[] = [];
   /** The Janitor's demon dachshund, trotting at his heel. */
   readonly dog: DemonDog | null = null;
+  /** Filmed apparition that stands in for the 3D body once its video has loaded. */
+  readonly apparition: Apparition | null = null;
 
   constructor(kind: GhostKind, kit: GhostKit) {
     this.kind = kind;
@@ -651,6 +657,13 @@ export class GhostModel {
 
     this.buildHead(kit, headBind);
     this.buildProps(kit, headBind, hipsObj, hipsBind, chestObj, chestBind);
+    const loop = kit.loops[kind];
+    if (loop) {
+      const app = new Apparition(loop, u, 2.35 * look.scale[1]);
+      (this as { apparition: Apparition | null }).apparition = app;
+      this.root.add(app.mesh);
+      this.mats.push(app.mesh.material as THREE.Material);
+    }
     if (kind === "janitor") {
       const dog = new DemonDog();
       (this as { dog: DemonDog | null }).dog = dog;
@@ -843,6 +856,11 @@ export class GhostModel {
     }
 
     this.dog?.update(dt, time, s, this.frozen, 1 - u.uDissolve.value, u.uLit.value);
+    // Once the filmed apparition has frames, it replaces the 3D body (and the
+    // Janitor's clip already has the dog walking beside him).
+    const filmed = !!this.apparition?.ready;
+    this.body.visible = !filmed;
+    if (this.dog && filmed) this.dog.root.visible = false;
 
     if (this.keySwing) {
       const k = clamp(s / 1.6, 0, 1);
@@ -944,7 +962,13 @@ export class GhostModel {
     this.root.rotation.set(0, 0, 0);
   }
 
+  /** Billboard the apparition towards the camera; call every frame with the ghost's visibility. */
+  face(camera: THREE.Camera, visible: boolean) {
+    this.apparition?.update(camera, visible);
+  }
+
   dispose() {
+    this.apparition?.dispose();
     for (const m of this.mats) m.dispose();
     this.mixer?.stopAllAction();
   }

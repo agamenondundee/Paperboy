@@ -885,6 +885,7 @@ export class GhostSystem implements GhostSystemApi {
       u.uOrigin.value.copy(g.root.position);
       g.root.visible = g.dissolve < 0.995;
       if (g.root.visible) g.model.update(dt, time);
+      g.model.face(g.scareCam ?? camera, g.root.visible);
 
       if (slot.owner === g) {
         const L = slot.light;
