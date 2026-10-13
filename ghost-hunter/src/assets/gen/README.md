@@ -9,6 +9,7 @@ optional: the game uses art drawn in code for anything missing. Rebuild
 | `title.png` | title screen background |
 | `ending.png` | win screen background |
 | `intro.mp4` | intro cutscene (skippable) |
+| `ending-video.mp4` | looping video behind the win screen |
 | `face-queen.png` | Prom Queen jump scare |
 | `face-janitor.png` | Janitor jump scare |
 | `face-principal.png` | Principal Hale jump scare |

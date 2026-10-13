@@ -38,6 +38,8 @@ export interface Assets {
     floor?: THREE.Texture;
     /** URL of the intro video if the file exists. */
     introVideo?: string;
+    /** URL of the ending video (ending-video.mp4) if the file exists. */
+    endingVideo?: string;
   };
   xbot: GLTF | null; // rigged mannequin with clips: idle, walk, run, sneak_pose, sad_pose, agree, headShake
   lee: GLTF | null; // scanned head mesh
@@ -349,6 +351,8 @@ export interface EndResult {
   continuesUsed: number;
   canContinue: boolean;
   image: HTMLImageElement | null;
+  /** Looping background video for the end screen, shown over the image. */
+  video?: string | null;
 }
 export interface Note {
   id: string;

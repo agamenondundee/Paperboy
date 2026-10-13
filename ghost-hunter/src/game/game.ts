@@ -1279,6 +1279,7 @@ export class Game {
       continuesUsed: this.continuesUsed,
       canContinue: false,
       image: this.assets.gen.ending ?? null,
+      video: this.assets.gen.endingVideo ?? null,
     };
     this.endDelay = 2.2;
     this.refreshObjective();

@@ -71,8 +71,8 @@ function discoverGen(): Map<string, string> {
     const dot = file.lastIndexOf(".");
     const name = file.slice(0, dot).toLowerCase();
     const ext = file.slice(dot + 1).toLowerCase();
-    // The intro must be a video; everything else must be a picture.
-    if ((name === "intro") !== (ext === "mp4")) continue;
+    // The intro and ending videos must be videos; everything else must be a picture.
+    if ((name === "intro" || name === "ending-video") !== (ext === "mp4")) continue;
     const rank = EXT_ORDER.indexOf(ext);
     const prev = best.get(name);
     if (!prev || rank < prev.rank) best.set(name, { url, rank });
@@ -279,6 +279,8 @@ export async function loadAssets(onProgress: (f: number) => void): Promise<Asset
     } else if (name === "intro") {
       // Streamed by the <video> element when it plays, so nothing to fetch now.
       assets.gen.introVideo = url;
+    } else if (name === "ending-video") {
+      assets.gen.endingVideo = url;
     }
   });
 

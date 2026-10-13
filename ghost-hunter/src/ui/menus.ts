@@ -444,6 +444,19 @@ export class Menus implements MenusApi {
       bg.style.backgroundImage = "";
       bg.classList.remove("on");
     }
+    bg.querySelector("video")?.remove();
+    if (r.video) {
+      const v = document.createElement("video");
+      v.src = r.video;
+      v.muted = true;
+      v.loop = true;
+      v.playsInline = true;
+      v.autoplay = true;
+      v.setAttribute("aria-hidden", "true");
+      bg.appendChild(v);
+      bg.classList.add("on");
+      v.play().catch(() => {});
+    }
 
     this.countScore(Math.max(0, Math.round(r.score)));
     this.show(el);
