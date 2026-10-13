@@ -10,6 +10,8 @@ optional: the game uses art drawn in code for anything missing. Rebuild
 | `ending.png` | win screen background |
 | `intro.mp4` | intro cutscene (skippable) |
 | `ending-video.mp4` | looping video behind the win screen |
+| `ghost-queen.mp4`, `ghost-janitor.mp4`, `ghost-principal.mp4` | filmed apparition loops (shot on black) that replace the 3D ghost bodies |
+| `flashback-gym.mp4` | prom night flashback played on first entering the gym |
 | `vision-queen.mp4`, `vision-janitor.mp4`, `vision-principal.mp4` | short vision played the first time each spirit spots you |
 | `face-queen.png` | Prom Queen jump scare |
 | `face-janitor.png` | Janitor jump scare |

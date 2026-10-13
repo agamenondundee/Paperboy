@@ -52,12 +52,13 @@ void main() {
   float n = noise(rel * 6.0 + vec3(0.0, -uTime * 0.35, 0.0)) * 0.7 + noise(rel * 17.0 + uTime * 0.2) * 0.3;
   float t = uDissolve * 1.12 - 0.06;
   if (n < t) discard;
-  float edge = uDissolve > 0.002 ? 1.0 - smoothstep(0.0, 0.08, n - t) : 0.0;
+  // The burning edge only belongs on the figure, never on the black around it.
+  float edge = uDissolve > 0.002 ? (1.0 - smoothstep(0.0, 0.08, n - t)) * a : 0.0;
 
   float shimmer = 0.88 + 0.12 * sin(uTime * 2.3 + vWorld.y * 7.0 + n * 6.28);
   vec3 col = c * (1.15 + uLit * 1.8 + uFlare * 1.2) * shimmer;
   col += uColor * (lum * 0.35 * (0.4 + uLit * 2.5) + edge * 6.0);
-  a = clamp(a * (0.86 + 0.14 * shimmer) + edge, 0.0, 1.0) * uFade;
+  a = clamp(a * (0.86 + 0.14 * shimmer) + edge * 0.6, 0.0, 1.0) * uFade;
   if (a < 0.01) discard;
   gl_FragColor = vec4(col, a);
   #include <tonemapping_fragment>
