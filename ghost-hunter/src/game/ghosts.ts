@@ -110,6 +110,7 @@ class GhostImpl implements Ghost {
   giggleT = 25;
   shriekT = 0;
   sndT = 1;
+  growlT = 4;
   emitT = 0;
   // Visual state
   dissolve = 1;
@@ -925,6 +926,16 @@ export class GhostSystem implements GhostSystemApi {
     const moving = g.speed > 0.25 && !g.frozen;
     switch (g.kind) {
       case "janitor":
+        // The dachshund smells you before he sees you: a warning growl when close.
+        g.growlT -= dt;
+        if (g.growlT <= 0 && dist < 9 && g.dissolve < 0.5) {
+          g.growlT = randRange(4, 7);
+          g.model.dog?.growl();
+          const pos = this.at(g, 0.25);
+          this.audio.tone(95, 60, 0.9, { type: "sawtooth", gain: 0.1, attack: 0.08 }, pos);
+          this.audio.noise(0.9, { type: "lowpass", f: 300, q: 2, gain: 0.25, attack: 0.1 }, pos);
+          this.audio.tone(420, 300, 0.18, { type: "square", gain: 0.05, at: 0.75 }, pos);
+        }
         if (moving && near) {
           g.sndT -= dt;
           if (g.sndT <= 0) {

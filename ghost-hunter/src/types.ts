@@ -40,6 +40,8 @@ export interface Assets {
     introVideo?: string;
     /** URL of the ending video (ending-video.mp4) if the file exists. */
     endingVideo?: string;
+    /** Short clips (vision-queen.mp4 and so on) played the first time each spirit is spotted. */
+    visions?: Partial<Record<GhostKind, string>>;
   };
   xbot: GLTF | null; // rigged mannequin with clips: idle, walk, run, sneak_pose, sad_pose, agree, headShake
   lee: GLTF | null; // scanned head mesh

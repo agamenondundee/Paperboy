@@ -10,6 +10,7 @@ optional: the game uses art drawn in code for anything missing. Rebuild
 | `ending.png` | win screen background |
 | `intro.mp4` | intro cutscene (skippable) |
 | `ending-video.mp4` | looping video behind the win screen |
+| `vision-queen.mp4`, `vision-janitor.mp4`, `vision-principal.mp4` | short vision played the first time each spirit spots you |
 | `face-queen.png` | Prom Queen jump scare |
 | `face-janitor.png` | Janitor jump scare |
 | `face-principal.png` | Principal Hale jump scare |

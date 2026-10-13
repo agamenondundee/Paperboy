@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { DemonDog } from "./ghostDog";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
@@ -576,6 +577,8 @@ export class GhostModel {
   private twitchQ = new THREE.Quaternion();
   private kv = 0;
   private mats: THREE.Material[] = [];
+  /** The Janitor's demon dachshund, trotting at his heel. */
+  readonly dog: DemonDog | null = null;
 
   constructor(kind: GhostKind, kit: GhostKit) {
     this.kind = kind;
@@ -648,6 +651,12 @@ export class GhostModel {
 
     this.buildHead(kit, headBind);
     this.buildProps(kit, headBind, hipsObj, hipsBind, chestObj, chestBind);
+    if (kind === "janitor") {
+      const dog = new DemonDog();
+      (this as { dog: DemonDog | null }).dog = dog;
+      this.root.add(dog.root);
+      this.mats.push(...dog.materials);
+    }
     for (let o: THREE.Object3D | null = this.pivot; o && o !== this.body; o = o.parent) this.headChain.unshift(o);
     this.root.traverse((o) => {
       o.castShadow = false;
@@ -832,6 +841,8 @@ export class GhostModel {
       for (const n of this.headChain) _q.multiply(n.quaternion);
       this.hang.quaternion.slerpQuaternions(IDENT, _q.invert(), 0.75);
     }
+
+    this.dog?.update(dt, time, s, this.frozen, 1 - u.uDissolve.value, u.uLit.value);
 
     if (this.keySwing) {
       const k = clamp(s / 1.6, 0, 1);

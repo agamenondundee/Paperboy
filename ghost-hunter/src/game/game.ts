@@ -173,6 +173,9 @@ export class Game {
   private stingT = -99;
   private repelTold = false;
   private spottedTold = false;
+  /** A ghost vision clip is playing; the game is frozen underneath it. */
+  private cutscene = false;
+  private visionsShown = new Set<string>();
   private headFlickT = 0;
   private headFlickered = false;
   private headOn = true;
@@ -301,7 +304,7 @@ export class Game {
         this.expectUnlock = false;
         return;
       }
-      if (this.active && !this.ending && this.hadLock && !this.menus.isPaused() && !this.menus.isNoteOpen()) this.pause();
+      if (this.active && !this.ending && this.hadLock && !this.cutscene && !this.menus.isPaused() && !this.menus.isNoteOpen()) this.pause();
     });
     // Desktop: a click on the view takes the mouse back if the lock was lost.
     canvas.addEventListener("mousedown", () => {
@@ -324,7 +327,7 @@ export class Game {
   }
 
   private canPause() {
-    return this.active && !this.ending && !this.menus.isPaused() && !this.menus.isNoteOpen();
+    return this.active && !this.ending && !this.cutscene && !this.menus.isPaused() && !this.menus.isNoteOpen();
   }
 
   pause() {
@@ -407,6 +410,7 @@ export class Game {
     this.thunderT = -1;
     this.repelTold = false;
     this.spottedTold = false;
+    this.visionsShown.clear();
     this.headFlickT = 0;
     this.headFlickered = false;
     this.hollowOut = false;
@@ -587,7 +591,7 @@ export class Game {
     inp.poll();
     const look = inp.consumeLook();
     const paused = this.menus.isPaused();
-    const noteOpen = this.menus.isNoteOpen();
+    const noteOpen = this.menus.isNoteOpen() || this.cutscene;
     const mapOpen = this.minimap.isOpen();
     const live = this.active && !this.ending;
     const playing = live && (this.phase === "intro" || this.phase === "hunt" || this.phase === "escape");
@@ -1153,6 +1157,15 @@ export class Game {
   }
 
   private onSpotted(g: Ghost) {
+    const vision = this.assets.gen.visions?.[g.kind];
+    if (vision && !this.visionsShown.has(g.kind) && !this.cutscene) {
+      this.visionsShown.add(g.kind);
+      this.cutscene = true;
+      this.menus.playIntro(vision).then(() => {
+        this.cutscene = false;
+        this.input.clearPresses();
+      });
+    }
     if (this.simTime - this.stingT > 6) {
       this.stingT = this.simTime;
       this.audio.sting();

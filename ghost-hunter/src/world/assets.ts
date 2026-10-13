@@ -72,7 +72,8 @@ function discoverGen(): Map<string, string> {
     const name = file.slice(0, dot).toLowerCase();
     const ext = file.slice(dot + 1).toLowerCase();
     // The intro and ending videos must be videos; everything else must be a picture.
-    if ((name === "intro" || name === "ending-video") !== (ext === "mp4")) continue;
+    const isVideo = name === "intro" || name === "ending-video" || name.startsWith("vision-");
+    if (isVideo !== (ext === "mp4")) continue;
     const rank = EXT_ORDER.indexOf(ext);
     const prev = best.get(name);
     if (!prev || rank < prev.rank) best.set(name, { url, rank });
@@ -281,6 +282,9 @@ export async function loadAssets(onProgress: (f: number) => void): Promise<Asset
       assets.gen.introVideo = url;
     } else if (name === "ending-video") {
       assets.gen.endingVideo = url;
+    } else if (name.startsWith("vision-")) {
+      const kind = name.slice(7);
+      if (kind === "queen" || kind === "janitor" || kind === "principal") (assets.gen.visions ??= {})[kind] = url;
     }
   });
 
